@@ -14,10 +14,10 @@ from requests.models import Response
 class Index:
 
     ## TODO support id based loading as well if already exists
-    def __init__(self, API_key: str, name: str):
+    def __init__(self, API_key: str, name: str, _base_url: str = "https://sturdystatistics.com/api/text/v1/index"):
 
         self.API_key = API_key
-        self.base_url = "https://sturdystatistics.com/api/text/v1/index"
+        self.base_url = _base_url 
 
         self.name = name
         self.id = None
@@ -31,6 +31,9 @@ class Index:
             print(f"""Found an existing index with id="{self.id}".""")
 
 
+
+    def _job_base_url(self) -> str:
+        return self.base_url.replace("/index", "/job")
 
     def _check_status(self, info: Response) -> None:
         if (200 != info.status_code):
@@ -146,7 +149,7 @@ class Index:
         #    }'
         info = self._post(f"/{self.id}/doc/commit", dict())
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 10)
+        job = Job(self.API_key, job_id, 10, _base_url=self._job_base_url())
         if not wait:
             return job
         return job.wait()
@@ -164,7 +167,7 @@ class Index:
         #    }'
         info = self._post(f"/{self.id}/doc/unstage", dict())
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 5)
+        job = Job(self.API_key, job_id, 3, _base_url=self._job_base_url())
         if not wait:
             return job
         return job.wait()
@@ -175,7 +178,7 @@ class Index:
             raise RuntimeError(f"""The maximum batch size is 250 documents.""")
         info = self._post(f"/{self.id}/doc", dict(docs=records, save=save))
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 1)
+        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
         return job.wait()
 
 
@@ -279,7 +282,7 @@ class Index:
 
         info = self._post(f"/{self.id}/train", params)
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 30)
+        job = Job(self.API_key, job_id, 30, _base_url=self._job_base_url())
         if wait:
             return job.wait()
         else:
@@ -397,6 +400,6 @@ class Index:
         if job_name is not None and job_name.strip() != "":
             params["job_name"] = job_name
 
-        job = Job(self.API_key, "", 1)
+        job = Job(self.API_key, "", 1, _base_url=self._job_base_url())
         res = job._get("", params)
         return res.json()

@@ -10,11 +10,11 @@ from requests.models import Response
 
 
 class Job:
-    def __init__(self, API_key, job_id, poll_seconds = 1):
+    def __init__(self, API_key: str, job_id: str, poll_seconds: int = 1, _base_url: str= "https://sturdystatistics.com/api/text/v1/job"):
         self.API_key = API_key
         self.job_id = job_id
         self.poll_seconds = poll_seconds
-        self.base_url = "https://sturdystatistics.com/api/text/v1/job"
+        self.base_url = _base_url 
 
     def _check_status(self, info: Response) -> None:
         if (200 != info.status_code):
