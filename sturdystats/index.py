@@ -18,7 +18,6 @@ class Index:
 
         self.API_key = API_key
         self.base_url = "https://sturdystatistics.com/api/text/v1/index"
-        self.base_url = "http://localhost:8050/api/text/v1/index"
 
         self.name = name
         self.id = None

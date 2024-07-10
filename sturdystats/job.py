@@ -15,7 +15,6 @@ class Job:
         self.job_id = job_id
         self.poll_seconds = poll_seconds
         self.base_url = "https://sturdystatistics.com/api/text/v1/job"
-        self.base_url = "http://localhost:8050/api/text/v1/job"
 
     def _check_status(self, info: Response) -> None:
         if (200 != info.status_code):
