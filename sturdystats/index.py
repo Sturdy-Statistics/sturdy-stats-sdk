@@ -149,7 +149,7 @@ class Index:
         #    }'
         info = self._post(f"/{self.id}/doc/commit", dict())
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 10, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 20, _base_url=self._job_base_url())
         if not wait:
             return job
         return job.wait()
@@ -167,7 +167,7 @@ class Index:
         #    }'
         info = self._post(f"/{self.id}/doc/unstage", dict())
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 3, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
         if not wait:
             return job
         return job.wait()
@@ -178,7 +178,7 @@ class Index:
             raise RuntimeError(f"""The maximum batch size is 250 documents.""")
         info = self._post(f"/{self.id}/doc", dict(docs=records, save=save))
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
         return job.wait()
 
 
