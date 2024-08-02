@@ -321,7 +321,7 @@ class Index:
 
         print("running predictions...")
         for i, batch in enumerate(chunked(records, batch_size)):
-            info = self._upload_batch(records, save="false")
+            info = self._upload_batch(batch, save="false")
             results.extend(info["result"]['results'])
             print(f"""    upload batch {1+i:4d}: response {str(info)}""")
             print("...done")

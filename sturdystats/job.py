@@ -47,12 +47,12 @@ class Job:
         return status["status"] not in ["FAILED", "SUCCEEDED"]
 
     def wait(self):
-        poll_seconds = 1
+        poll_seconds = .5
         while True:
             if not self._is_running():
                 break
             sleep(poll_seconds)
-            poll_seconds = min(self.poll_seconds, poll_seconds+.5)
+            poll_seconds = min(self.poll_seconds, poll_seconds+.3)
         status = self.get_status()
         if status["status"] == "FAILED":
             raise Exception(f"Job {self.job_id} failed with the following error: {status['error']}")
