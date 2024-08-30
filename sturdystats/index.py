@@ -4,7 +4,7 @@ from sturdystats.job import Job
 import srsly                           # to decode output
 from more_itertools import chunked     # to batch data for API calls
 
-
+from kramer import Pandata
 
 # for type checking
 from typing import Optional, Iterable, Dict
@@ -414,3 +414,11 @@ class Index:
         job = Job(self.API_key, "", 1, _base_url=self._job_base_url())
         res = job._get("", params)
         return res.json()
+    
+    def get_pandata(
+        self
+    ) -> Pandata:
+        
+        info = self._get(f"/{self.id}/pandata", dict())
+
+        return Pandata(srsly.msgpack_loads(info.content))
