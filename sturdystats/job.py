@@ -58,3 +58,5 @@ class Job:
             raise Exception(f"Job {self.job_id} failed with the following error: {status['error']}")
         return status
 
+    def cancel(self):
+        return self._post(f"/{self.job_id}/cancel", dict())

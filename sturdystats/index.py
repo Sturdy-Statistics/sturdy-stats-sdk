@@ -379,6 +379,29 @@ class Index:
         joined = ",".join(doc_ids)
         return self._get(f"/{self.id}/doc/{joined}", dict()).json()
 
+    def getPandata(
+        self,
+    ):
+        return srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()))
+
+    def queryMeta(self, query: str):
+        return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", dict(q=query)))
+    
+    def annotate(self):
+        return self._post(f"/{self.id}/annotate", dict())
+
+    def clone(self, new_name):
+        info = self._post(f"/{self.id}/clone", dict(new_name=new_name))
+        job_id = info.json()["job_id"]
+        job = Job(self.API_key, job_id, 20, _base_url=self._job_base_url())
+        return job.wait()
+
+    def delete(self, force: bool):
+        if not force:
+            print("Are you sure you want to delete this index? There is no going back")
+            return
+        return self._post(f"/{self.id}/delete", dict())
+
     def topicDiff(
         self,
         q1: str,
