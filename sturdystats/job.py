@@ -44,7 +44,7 @@ class Job:
 
     def _is_running(self):
         status = self.get_status()
-        return status["status"] not in ["FAILED", "SUCCEEDED"]
+        return status["status"] not in ["FAILED", "SUCCEEDED", "CANCELLED"]
 
     def wait(self):
         poll_seconds = .5

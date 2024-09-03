@@ -382,10 +382,10 @@ class Index:
     def getPandata(
         self,
     ):
-        return srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()))
+        return srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()).content)
 
     def queryMeta(self, query: str):
-        return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", dict(q=query)))
+        return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", dict(q=query)).content)
     
     def annotate(self):
         return self._post(f"/{self.id}/annotate", dict())
