@@ -14,15 +14,26 @@ from requests.models import Response
 class Index:
 
     ## TODO support id based loading as well if already exists
-    def __init__(self, API_key: str, name: str, _base_url: str = "https://sturdystatistics.com/api/text/v1/index"):
+    def __init__(
+            self,
+            API_key: str,
+            name: Optional[str] = None,
+            id: Optional[str] = None,
+            _base_url: Optional[str] = None
+    ):
 
         self.API_key = API_key
-        self.base_url = _base_url 
+        self.base_url = _base_url or "https://sturdystatistics.com/api/text/v1/index"
 
         self.name = name
-        self.id = None
+        self.id = id
 
-        status = self._get_status(index_name=self.name)
+        if (self.name is None) and (self.id is None):
+            raise ValueError("Must provide either an index_name or an index_id.")
+        if (self.name is not None) and (self.id is not None):
+            raise ValueError("Cannot provide both an index_name and an index_id.")
+
+        status = self._get_status(index_name=self.name, index_id = self.id)
         if status is None:
             self.id = self._create(self.name)
             print(f"""Created new index with id="{self.id}".""")
@@ -332,7 +343,7 @@ class Index:
 
     def query(
         self,
-        search_query: Optional[str] = None, 
+        search_query: Optional[str] = None,
         topic_id: Optional[int] = None,
         topic_group_id: Optional[int] = None,
         filters: str = "",
@@ -390,7 +401,7 @@ class Index:
     def listJobs(
         self,
         status: str= "RUNNING",
-        job_name: Optional[str] = None 
+        job_name: Optional[str] = None
     ):
         assert status in [None, "", "RUNNING", "FAILED", "SUCCEEDED", "PENDING"]
         assert job_name in [None, "", "trainIndex", "commitIndex", "unstageIndex", "writeDocs"]
