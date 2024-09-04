@@ -1,4 +1,6 @@
 import requests
+import time
+import os
 from sturdystats.job import Job
 
 import srsly                           # to decode output
@@ -16,13 +18,13 @@ class Index:
     ## TODO support id based loading as well if already exists
     def __init__(
             self,
-            API_key: str,
+            API_key: Optional[str] = None,
             name: Optional[str] = None,
             id: Optional[str] = None,
             _base_url: Optional[str] = None
     ):
 
-        self.API_key = API_key
+        self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
         self.base_url = _base_url or "https://sturdystatistics.com/api/text/v1/index"
 
         self.name = name
@@ -185,8 +187,8 @@ class Index:
 
 
     def _upload_batch(self, records: Iterable[Dict], save = "true"):
-        if len(records) > 250:
-            raise RuntimeError(f"""The maximum batch size is 250 documents.""")
+        if len(records) > 1000:
+            raise RuntimeError(f"""The maximum batch size is 1000 documents.""")
         info = self._post(f"/{self.id}/doc", dict(docs=records, save=save))
         job_id = info.json()["job_id"]
         job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
@@ -195,7 +197,7 @@ class Index:
 
     def upload(self,
               records: Iterable[Dict],
-              batch_size: int = 200,
+              batch_size: int = 1000,
               commit: bool = True):
         """Uploads documents to the index and commit them for
     permanent storage.  Documents are processed by the AI model if the
@@ -214,7 +216,7 @@ class Index:
     This is a locking operation. A client cannot call upload, train or
     commit while an upload is already in progress. Consequently, the
     operation is more efficient with batches of documents. The API
-    supports a batch size of up to 250 documents at a time. The larger
+    supports a batch size of up to 1000 documents at a time. The larger
     the batch size, the more efficient the upload.
 
     https://sturdystatistics.com/api/documentation#tag/apitextv1/operation/writeDocs
@@ -301,7 +303,7 @@ class Index:
 
 
 
-    def predict(self, records: Iterable[Dict], batch_size: int = 200):
+    def predict(self, records: Iterable[Dict], batch_size: int = 1000):
         """"Predict" function analogous to sklearn or keras: accepts
     a batch of documents and returns their corresponding predictions.
 
@@ -388,7 +390,12 @@ class Index:
         return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", dict(q=query)).content)
     
     def annotate(self):
-        return self._post(f"/{self.id}/annotate", dict())
+        self._post(f"/{self.id}/annotate", dict())
+        while True:
+            res = self.get_status()
+            if res["state"] == "ready":
+                break
+            time.sleep(3)
 
     def clone(self, new_name):
         info = self._post(f"/{self.id}/clone", dict(new_name=new_name))
