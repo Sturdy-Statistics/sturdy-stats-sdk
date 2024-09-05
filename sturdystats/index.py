@@ -431,11 +431,14 @@ class Index:
     def listJobs(
         self,
         status: str= "RUNNING",
-        job_name: Optional[str] = None
+        job_name: Optional[str] = None,
+        only_current_index: bool = True,
     ):
         assert status in [None, "", "RUNNING", "FAILED", "SUCCEEDED", "PENDING"]
         assert job_name in [None, "", "trainIndex", "commitIndex", "unstageIndex", "writeDocs"]
-        params = dict(index_id = self.id)
+        params = dict()
+        if only_current_index:
+            params["index_id"] = self.id
         if status is not None and status.strip() != "":
             params["status"] = status
         if job_name is not None and job_name.strip() != "":
@@ -444,3 +447,18 @@ class Index:
         job = Job(self.API_key, "", 1, _base_url=self._job_base_url())
         res = job._get("", params)
         return res.json()
+
+    def listIndices(
+        self,
+        name_filter: Optional[str] = None,
+        state_filter: Optional[str] = None,
+    ):
+        res = self._get("", dict()).json()
+        results = []
+        for r in res:
+            if name_filter is not None and name_filter not in r["name"]:
+                continue
+            if state_filter is not None and state_filter != r["state"]:
+                continue
+            results.append(r)
+        return results
