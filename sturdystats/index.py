@@ -243,12 +243,12 @@ class Index:
 
         print("uploading data to index...")
         batch = []
-        maxsize = 1e7+48
+        maxsize = 1e7 - 1e6
         cursize = 0
         for i, doc in enumerate(records):
             docsize = len(json.dumps(doc).encode("utf-8"))
             if docsize > maxsize:
-                raise RuntimeError(f"""Record number {i} is {docsize} bytes. A document cannot be larger than {maxsize}""")
+                raise RuntimeError(f"""Record number {i} is {docsize} bytes. A document cannot be larger than {maxsize} bytes""")
             if cursize + docsize > maxsize or len(batch) >= batch_size:
                 info = self._upload_batch(batch)
                 results.extend(info["result"]["results"])
