@@ -1,6 +1,7 @@
 import requests
 import time
 import os
+import json
 from sturdystats.job import Job
 
 import srsly                           # to decode output
@@ -241,10 +242,25 @@ class Index:
         #    }'
 
         print("uploading data to index...")
-        for i, batch in enumerate(chunked(records, batch_size)):
+        batch = []
+        maxsize = 1e7+48
+        cursize = 0
+        for i, doc in enumerate(records):
+            docsize = len(json.dumps(doc).encode("utf-8"))
+            if docsize > maxsize:
+                raise RuntimeError(f"""Record number {i} is {docsize} bytes. A document cannot be larger than {maxsize}""")
+            if cursize + docsize > maxsize or len(batch) >= batch_size:
+                info = self._upload_batch(batch)
+                results.extend(info["result"]["results"])
+                batch = []
+                cursize = 0
+                print(f"""    upload status: record no {i}""")
+            batch.append(doc)
+            cursize += docsize
+
+        if len(batch) > 0:
             info = self._upload_batch(batch)
             results.extend(info["result"]["results"])
-            print(f"""    upload batch {1+i:4d}""")
         if commit: self.commit()
         return results
 
