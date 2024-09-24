@@ -31,14 +31,13 @@ class Job:
         assert(200 == info.status_code)
 
     def _post(self, url: str, params: Dict) -> Response:
-        payload = {"api_key": self.API_key, **params}
-        res = requests.post(self.base_url + url, json=payload)
+        payload = {**params}
+        res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
         self._check_status(res)
         return res
 
     def _get(self, url: str, params: Dict) -> Response:
-        params = {"api_key": self.API_key, **params}
-        res = requests.get(self.base_url + url , params=params)
+        res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
         self._check_status(res)
         return res
 
