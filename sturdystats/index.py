@@ -369,15 +369,16 @@ class Index:
         limit: int = 20,
         sort_by: str = "relevance",
         ascending: bool = False,
-        summarize_by: str = "paragraph",
+        context: int = 0,
+        override_args: dict = dict()
     ):
         params = dict(
             offset=offset,
             limit=limit,
             sort_by=sort_by,
             ascending=ascending,
-            summarize_by=summarize_by,
-            filters=filters
+            filters=filters,
+            context=context,
         )
         if search_query is not None:
             params["query"] = search_query
@@ -385,17 +386,30 @@ class Index:
             params['topic_ids'] = topic_id
         if topic_group_id is not None:
             params["topic_group_id"] = topic_group_id
-
+        params = {**params, **override_args}
         res = self._get(f"/{self.id}/doc", params)
         return res.json()
 
     def getDocs(
         self,
-        doc_ids: list[str]
+        doc_ids: list[str],
+        search_query: Optional[str] = None,
+        topic_id: Optional[int] = None,
+        topic_group_id: Optional[int] = None,
+        context: int = 0,
+        override_args: dict = dict()
     ):
         assert len(doc_ids) > 0
+        params = dict(context=context)
+        if search_query is not None:
+            params["query"] = search_query
+        if topic_id is not None:
+            params['topic_ids'] = topic_id
+        if topic_group_id is not None:
+            params["topic_group_id"] = topic_group_id
+        params = {**params, **override_args}
         joined = ",".join(doc_ids)
-        return self._get(f"/{self.id}/doc/{joined}", dict()).json()
+        return self._get(f"/{self.id}/doc/{joined}", params).json()
 
     def getPandata(
         self,

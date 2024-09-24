@@ -4,6 +4,12 @@ from time import sleep
 import json
 
 import srsly
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    stop_after_delay,
+    wait_random_exponential,
+) 
 
 # for type checking
 from typing import Dict 
@@ -36,7 +42,8 @@ class Job:
         self._check_status(res)
         return res
 
-
+    @retry(wait=wait_random_exponential(min=1, max=20),
+           stop=(stop_after_delay(30) | stop_after_attempt(5)))
     def get_status(self):
         res = self._get("/"+self.job_id, dict())
         res = res.json()
