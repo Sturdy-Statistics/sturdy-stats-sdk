@@ -6,6 +6,10 @@ from sturdystats.job import Job
 
 import srsly                           # to decode output
 from more_itertools import chunked     # to batch data for API calls
+from tenacity import (
+    retry,
+    stop_after_attempt,
+) 
 
 
 
@@ -22,7 +26,8 @@ class Index:
             API_key: Optional[str] = None,
             name: Optional[str] = None,
             id: Optional[str] = None,
-            _base_url: Optional[str] = None
+            _base_url: Optional[str] = None,
+            verbose: bool = True
     ):
 
         self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
@@ -30,6 +35,7 @@ class Index:
 
         self.name = name
         self.id = id
+        self.verbose = verbose
 
         if (self.name is None) and (self.id is None):
             raise ValueError("Must provide either an index_name or an index_id.")
@@ -39,11 +45,14 @@ class Index:
         status = self._get_status(index_name=self.name, index_id = self.id)
         if status is None:
             self.id = self._create(self.name)
-            print(f"""Created new index with id="{self.id}".""")
+            self._print(f"""Created new index with id="{self.id}".""")
         else:
             self.id = status["index_id"]
-            print(f"""Found an existing index with id="{self.id}".""")
+            self._print(f"""Found an existing index with id="{self.id}".""")
 
+
+    def _print(self, *msg):
+        if self.verbose: print(*msg)
 
 
     def _job_base_url(self) -> str:
@@ -51,10 +60,12 @@ class Index:
 
     def _check_status(self, info: Response) -> None:
         if (200 != info.status_code):
-            print(f"""error code {info.status_code}""")
-            print(info.content.decode("utf-8"))
+            self._print(f"""error code {info.status_code}""")
+            self._print(info.content.decode("utf-8"))
+            raise RuntimeError(info.content.decode("utf-8"))
         assert(200 == info.status_code)
 
+    @retry(stop=(stop_after_attempt(3)))
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
@@ -153,7 +164,7 @@ class Index:
     def commit(self, wait: bool = True):
         """
         """
-        print(f"""committing changes to index "{self.id}"...""", end="")
+        self._print(f"""committing changes to index "{self.id}"...""", end="")
         # Commit changes from the staging index to the permanent index.  Equivalent to:
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/commit \
@@ -171,7 +182,7 @@ class Index:
     def unstage(self, wait: bool = True):
         """
         """
-        print(f"""unstaging changes to index "{self.id}"...""", end="")
+        self._print(f"""unstaging changes to index "{self.id}"...""", end="")
         # Commit changes from the staging index to the permanent index.  Equivalent to:
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/commit \
@@ -226,9 +237,9 @@ class Index:
 
         status = self.get_status()
         if "untrained" == status["state"]:
-            print("Uploading data to UNTRAINED index for training.")
+            self._print("Uploading data to UNTRAINED index for training.")
         elif "ready" == status["state"]:
-            print("Uploading data to TRAINED index for prediction.")
+            self._print("Uploading data to TRAINED index for prediction.")
         else:
             raise RuntimeError(f"""Unknown status "{status['state']}" for index "{self.name}".""")
         results = []
@@ -241,7 +252,7 @@ class Index:
         #      "docs": JSON_DOC_DATA
         #    }'
 
-        print("uploading data to index...")
+        self._print("uploading data to index...")
         batch = []
         maxsize = 1e7 - 1e6
         cursize = 0
@@ -254,7 +265,7 @@ class Index:
                 results.extend(info["result"]["results"])
                 batch = []
                 cursize = 0
-                print(f"""    upload status: record no {i}""")
+                self._print(f"""    upload status: record no {i}""")
             batch.append(doc)
             cursize += docsize
 
@@ -297,7 +308,7 @@ class Index:
 
         status = self.get_status()
         if ("untrained" != status["state"]) and not force:
-            print(f"index {self.name} is already trained.")
+            self._print(f"index {self.name} is already trained.")
             return status
 
         # Issue a training command to the index.  Equivalent to:
@@ -348,12 +359,12 @@ class Index:
         #      "docs": JSON_DOC_DATA
         #    }'
 
-        print("running predictions...")
+        self._print("running predictions...")
         for i, batch in enumerate(chunked(records, batch_size)):
             info = self._upload_batch(batch, save="false")
             results.extend(info["result"]['results'])
-            print(f"""    upload batch {1+i:4d}: response {str(info)}""")
-            print("...done")
+            self._print(f"""    upload batch {1+i:4d}: response {str(info)}""")
+            self._print("...done")
 
             # no commit needed since this makes no change to the index
 
@@ -443,8 +454,8 @@ class Index:
         self,
         q1: str,
         q2: str = "",
-        limit: int = 20,
-        cutoff: float = 2.0,
+        limit: int = 50,
+        cutoff: float = 1.0,
         min_confidence: float = 95,
     ):
         params = dict(
