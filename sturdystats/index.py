@@ -10,6 +10,8 @@ from tenacity import (
     retry,
     stop_after_attempt,
 ) 
+import spacy
+from spacy.tokens import Doc, Span, Token, DocBin
 
 
 
@@ -49,6 +51,7 @@ class Index:
         else:
             self.id = status["index_id"]
             self._print(f"""Found an existing index with id="{self.id}".""")
+        self.pandata = None
 
 
     def _print(self, *msg):
@@ -422,10 +425,26 @@ class Index:
         joined = ",".join(doc_ids)
         return self._get(f"/{self.id}/doc/{joined}", params).json()
 
+    def getDocsBinary(
+        self,
+        doc_ids: list[str],
+    ):
+        assert len(doc_ids) > 0
+        joined = ",".join(doc_ids)
+        docbin = DocBin().from_bytes(self._get(f"/{self.id}/doc/binary/{joined}", dict()).content)
+        pandata: dict = self.getPandata() # type: ignore
+        for tok, name in zip([Token, Span, Doc], ["token", "span", "doc"]):
+            for ext in pandata.get(name+"_exts", []): 
+                if not tok.has_extension(ext["name"]): tok.set_extension(**ext)
+        return docbin
+
+
     def getPandata(
         self,
     ):
-        return srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()).content)
+        if self.pandata is None:
+            self.pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()).content)
+        return self.pandata
 
     def queryMeta(self, query: str):
         return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", dict(q=query)).content)
