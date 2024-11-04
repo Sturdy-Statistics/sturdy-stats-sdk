@@ -469,6 +469,21 @@ class Index:
             return
         return self._post(f"/{self.id}/delete", dict())
 
+    def topicSearch(
+        self,
+        query: str = "",
+        filters: str = "",
+        doc_ids: list[str] = []
+    ):
+        params = dict(
+            query=query,
+            filters=filters,
+            doc_ids=doc_ids
+        )
+        res = self._get(f"/{self.id}/topic/search", params)
+        return res.json()
+
+
     def topicDiff(
         self,
         q1: str,
