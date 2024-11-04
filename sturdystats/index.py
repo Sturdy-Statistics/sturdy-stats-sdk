@@ -164,7 +164,7 @@ class Index:
     def commit(self, wait: bool = True):
         """
         """
-        self._print(f"""committing changes to index "{self.id}"...""", end="")
+        self._print(f"""committing changes to index "{self.id}"...""")
         # Commit changes from the staging index to the permanent index.  Equivalent to:
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/commit \
@@ -182,7 +182,7 @@ class Index:
     def unstage(self, wait: bool = True):
         """
         """
-        self._print(f"""unstaging changes to index "{self.id}"...""", end="")
+        self._print(f"""unstaging changes to index "{self.id}"...""") 
         # Commit changes from the staging index to the permanent index.  Equivalent to:
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/commit \
