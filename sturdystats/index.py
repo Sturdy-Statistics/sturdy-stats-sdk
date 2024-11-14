@@ -10,7 +10,6 @@ from tenacity import (
     retry,
     stop_after_attempt,
 ) 
-import spacy
 from spacy.tokens import Doc, Span, Token, DocBin
 
 
@@ -259,7 +258,12 @@ class Index:
         batch = []
         maxsize = 1e7 - 1e6
         cursize = 0
+        docIsNull = False
         for i, doc in enumerate(records):
+            if not docIsNull and len( (doc.get("doc", "") or "").strip()) == 0:
+                print(" Warning: field `doc` is empty. Empty documents are allowed but only data stored under the field `doc` will have its content indexed")
+                docIsNull = True
+
             docsize = len(json.dumps(doc).encode("utf-8"))
             if docsize > maxsize:
                 raise RuntimeError(f"""Record number {i} is {docsize} bytes. A document cannot be larger than {maxsize} bytes""")
@@ -473,12 +477,14 @@ class Index:
         self,
         query: str = "",
         filters: str = "",
-        doc_ids: list[str] = []
+        doc_ids: list[str] = [],
+        limit: int = 100
     ):
         params = dict(
             query=query,
             filters=filters,
-            doc_ids=doc_ids
+            doc_ids=doc_ids,
+            limit=limit,
         )
         res = self._get(f"/{self.id}/topic/search", params)
         return res.json()

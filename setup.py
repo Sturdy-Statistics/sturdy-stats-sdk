@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="sturdy-stats-sdk",
-    version="1.0.14",
+    version="1.0.15",
     author="Kian Ghodoussi",
     author_email="ghodoussikian@gmail.com",
     description="SDK for the Sturdy Statistics API",
@@ -17,5 +17,5 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
     ],
     python_requires='>=3.9',
-    install_requires=['more-itertools', 'srsly', 'tenacity'],
+    install_requires=['more-itertools', 'srsly', 'tenacity', 'pandas', 'spacy'],
 )

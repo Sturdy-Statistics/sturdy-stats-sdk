@@ -3,10 +3,9 @@ import os
 from time import sleep
 import json
 
-import srsly
+import pandas as pd
 from tenacity import (
     retry,
-    stop_after_attempt,
     stop_after_delay,
     wait_exponential
 ) 
@@ -49,6 +48,17 @@ class Job:
         if "result" in res:
             res["result"] = json.loads(res["result"])
         return res
+
+    def print_status(self):
+        st = self.get_status()
+        t0 = pd.Timestamp(st['finishedAt']) if 'finishedAt' in st else pd.Timestamp.now(tz='UTC')
+        dt = t0 - pd.Timestamp(st['startedAt'])
+        # format time elapsed as hh:mm:ss
+        y = dt.total_seconds()
+        h = 3600
+        tstr = f'{int(y/h):02d}h:{int(y%h/60):02d}m:{int(y%60):02d}s'
+        # one-line message
+        print(f"""{st['status']} - {tstr}""")
 
     def _is_running(self):
         status = self.get_status()
