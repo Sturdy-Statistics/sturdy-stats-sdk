@@ -283,7 +283,7 @@ class Index:
         return results
 
 
-    def train(self, params: Dict, force: bool = False, wait: bool = True):
+    def train(self, params: Dict, fast: bool = False, force: bool = False, wait: bool = True):
         """Trains an AI model on all documents in the production
     index. Once an index has been trained, documents are queryable,
     and the model automatically processes subsequently uploaded
@@ -317,6 +317,11 @@ class Index:
         if ("untrained" != status["state"]) and not force:
             self._print(f"index {self.name} is already trained.")
             return status
+
+        if fast:
+            params["K"] = params.get("K", 96)
+            params["burn_in"] = params.get("burn_in", 1000)
+            params["model_args"] = " MCMC/sample_a_start=100000 " + params.get("model_args", "")
 
         # Issue a training command to the index.  Equivalent to:
         #
