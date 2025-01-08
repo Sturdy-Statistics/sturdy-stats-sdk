@@ -393,6 +393,7 @@ class Index:
         sort_by: str = "relevance",
         ascending: bool = False,
         context: int = 0,
+        max_excerpts_per_doc: int = 1,
         override_args: dict = dict()
     ):
         params = dict(
@@ -402,6 +403,7 @@ class Index:
             ascending=ascending,
             filters=filters,
             context=context,
+            max_excerpts_per_doc=max_excerpts_per_doc
         )
         if search_query is not None:
             params["query"] = search_query
