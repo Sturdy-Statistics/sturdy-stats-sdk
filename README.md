@@ -1,6 +1,6 @@
 # Sturdy Stats SDK
 
-This is the sdk for the [Sturdy Statistics API](https://sturdystatistics.com/). 
+This is the sdk for the [Sturdy Statistics API](https://sturdystatistics.com/). We host a [series of public indicies](http://localhost:8050/public-dashboards) trained on 10qs, Earnings Calls, ArXiv, HackerNews, and various news streams that anyone can use for public data analysis. Uploading data requires an API key. Please reach out to us at https://sturdystatistics.com in order to create an api key. 
 
 ## Technical Features
 
@@ -14,9 +14,9 @@ from sturdystats import Index, Job
 import pandas as pd
 
 API_KEY = "XXX"
-df = pd.read_parquet('data/optimization_abstracts.parquet')
+df = pd.read_parquet('XXX')
+index = Index(API_key=API_KEY, name='XXX')
 
-index = Index(API_key=API_KEY, name='quickstart_cs.LG_version1')
 res = index.upload(df.to_dict("records"))
 job = index.train(params=dict(), fast=True, wait=True)
 ```
@@ -24,7 +24,7 @@ job = index.train(params=dict(), fast=True, wait=True)
 Explore Your Data
 ```python
 import plotly.express as px
-df_topic = pd.DataFrame(index.topicSearch()['topics'])
+df_topic = pd.DataFrame(index.topicSearch("")['topics'])
 
 import plotly.express as px
 fig = px.sunburst(
@@ -35,7 +35,17 @@ fig = px.sunburst(
 )
 ```
 
-{% include_relative sunburst.html %} 
+Run SQL queries against your unstructured ata
+```python
+topic_id = 12
+df = pd.DataFrame(index.queryMeta(f"""
+SELECT
+    quarter,
+    sum(sparse_list_extract({topic_id+1}, sum_topic_counts_inds, sum_topic_counts_vals)) as n_occurences
+FROM doc_meta 
+GROUP BY quarter 
+ORDER BY quarter""") )
+```
 
 
 
