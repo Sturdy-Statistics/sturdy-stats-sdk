@@ -48,7 +48,7 @@ class Index:
             self.id = self._create(self.name)
             self._print(f"""Created new index with id="{self.id}".""")
         else:
-            self.id = status["index_id"]
+            self.id = status["id"]
             self._print(f"""Found an existing index with id="{self.id}".""")
         self.pandata = None
 
@@ -103,7 +103,7 @@ class Index:
         #    }'
 
         info = self._post("", dict(name=index_name))
-        index_id = info.json()["index_id"]
+        index_id = info.json()["id"]
         return index_id
 
 
