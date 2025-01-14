@@ -61,11 +61,7 @@ class Index:
         return self.base_url.replace("/index", "/job")
 
     def _check_status(self, info: Response) -> None:
-        if (200 != info.status_code):
-            self._print(f"""error code {info.status_code}""")
-            self._print(info.content.decode("utf-8"))
-            raise RuntimeError(info.content.decode("utf-8"))
-        assert(200 == info.status_code)
+        info.raise_for_status()
 
     @retry(stop=(stop_after_attempt(3)))
     def _post(self, url: str, params: Dict) -> Response:
@@ -283,7 +279,7 @@ class Index:
         return results
 
 
-    def train(self, params: Dict, fast: bool = False, force: bool = False, wait: bool = True):
+    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: bool = True):
         """Trains an AI model on all documents in the production
     index. Once an index has been trained, documents are queryable,
     and the model automatically processes subsequently uploaded

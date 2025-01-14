@@ -23,25 +23,25 @@ class Job:
         self.poll_seconds = poll_seconds
         self.base_url = _base_url 
 
-    def _check_status(self, info: Response) -> None:
-        if (200 != info.status_code):
-            print(f"""error code {info.status_code}""")
-            print(info.content.decode("utf-8"))
-        assert(200 == info.status_code)
-
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
-        self._check_status(res)
-        return res
-
-    def _get(self, url: str, params: Dict) -> Response:
-        res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
-        self._check_status(res)
+        res.raise_for_status()
         return res
 
     @retry(wait=wait_exponential(),
            stop=(stop_after_delay(240)))
+    def _get_retry(self, url: str, params: Dict) -> Response:
+        res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
+        return res
+
+    @retry(wait=wait_exponential(),
+           stop=(stop_after_delay(2)))
+    def _get(self, url: str, params: Dict) -> Response:
+        res = self._get_retry(url, params)
+        res.raise_for_status()
+        return res
+
     def get_status(self):
         res = self._get("/"+self.job_id, dict())
         res = res.json()
