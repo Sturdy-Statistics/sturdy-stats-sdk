@@ -23,10 +23,14 @@ class Job:
         self.poll_seconds = poll_seconds
         self.base_url = _base_url 
 
+    def _check_status(self, info: Response) -> None:
+        if info.status_code != 200:
+            raise requests.HTTPError(info.content)
+
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
-        res.raise_for_status()
+        self._check_status(res)
         return res
 
     @retry(wait=wait_exponential(),
@@ -35,11 +39,11 @@ class Job:
         res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
         return res
 
-    @retry(wait=wait_exponential(),
-           stop=(stop_after_delay(2)))
+    #@retry(wait=wait_exponential(),
+    #       stop=(stop_after_delay(2)))
     def _get(self, url: str, params: Dict) -> Response:
         res = self._get_retry(url, params)
-        res.raise_for_status()
+        self._check_status(res)
         return res
 
     def get_status(self):

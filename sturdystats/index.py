@@ -61,9 +61,10 @@ class Index:
         return self.base_url.replace("/index", "/job")
 
     def _check_status(self, info: Response) -> None:
-        info.raise_for_status()
+        if info.status_code != 200:
+            raise requests.HTTPError(info.content)
 
-    @retry(stop=(stop_after_attempt(3)))
+    #@retry(stop=(stop_after_attempt(3)))
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
