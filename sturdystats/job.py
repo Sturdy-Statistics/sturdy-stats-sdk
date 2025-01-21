@@ -24,10 +24,8 @@ class Job:
         self.base_url = _base_url 
 
     def _check_status(self, info: Response) -> None:
-        if (200 != info.status_code):
-            print(f"""error code {info.status_code}""")
-            print(info.content.decode("utf-8"))
-        assert(200 == info.status_code)
+        if info.status_code != 200:
+            raise requests.HTTPError(info.content)
 
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
@@ -35,13 +33,19 @@ class Job:
         self._check_status(res)
         return res
 
-    def _get(self, url: str, params: Dict) -> Response:
+    @retry(wait=wait_exponential(),
+           stop=(stop_after_delay(240)))
+    def _get_retry(self, url: str, params: Dict) -> Response:
         res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
+        return res
+
+    #@retry(wait=wait_exponential(),
+    #       stop=(stop_after_delay(2)))
+    def _get(self, url: str, params: Dict) -> Response:
+        res = self._get_retry(url, params)
         self._check_status(res)
         return res
 
-    @retry(wait=wait_exponential(),
-           stop=(stop_after_delay(240)))
     def get_status(self):
         res = self._get("/"+self.job_id, dict())
         res = res.json()

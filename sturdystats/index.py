@@ -48,7 +48,7 @@ class Index:
             self.id = self._create(self.name)
             self._print(f"""Created new index with id="{self.id}".""")
         else:
-            self.id = status["index_id"]
+            self.id = status["id"]
             self._print(f"""Found an existing index with id="{self.id}".""")
         self.pandata = None
 
@@ -61,13 +61,10 @@ class Index:
         return self.base_url.replace("/index", "/job")
 
     def _check_status(self, info: Response) -> None:
-        if (200 != info.status_code):
-            self._print(f"""error code {info.status_code}""")
-            self._print(info.content.decode("utf-8"))
-            raise RuntimeError(info.content.decode("utf-8"))
-        assert(200 == info.status_code)
+        if info.status_code != 200:
+            raise requests.HTTPError(info.content)
 
-    @retry(stop=(stop_after_attempt(3)))
+    #@retry(stop=(stop_after_attempt(3)))
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
@@ -103,7 +100,7 @@ class Index:
         #    }'
 
         info = self._post("", dict(name=index_name))
-        index_id = info.json()["index_id"]
+        index_id = info.json()["id"]
         return index_id
 
 
@@ -283,7 +280,7 @@ class Index:
         return results
 
 
-    def train(self, params: Dict, fast: bool = False, force: bool = False, wait: bool = True):
+    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: bool = True):
         """Trains an AI model on all documents in the production
     index. Once an index has been trained, documents are queryable,
     and the model automatically processes subsequently uploaded
