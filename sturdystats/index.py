@@ -501,15 +501,21 @@ class Index:
         limit: int = 50,
         cutoff: float = 1.0,
         min_confidence: float = 95,
+        search_query1: str = "",
+        search_query2: str = "",
+        override_args: dict = dict()
     ):
         params = dict(
             q1=q1,
             limit=limit,
             cutoff=cutoff,
-            min_confidence=min_confidence
+            min_confidence=min_confidence,
+            search_query1=search_query1,
+            search_query2=search_query2
         )
         if len(q2.strip()) > 0:
             params["q2"] = q2
+        params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/diff", params)
         return res.json()
 
