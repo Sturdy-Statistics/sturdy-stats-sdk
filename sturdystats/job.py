@@ -4,6 +4,7 @@ from time import sleep
 import json
 
 import pandas as pd
+import srsly
 from tenacity import (
     retry,
     stop_after_delay,
@@ -17,11 +18,14 @@ from requests.models import Response
 
 class Job:
     def __init__(self, API_key: str, 
-                 job_id: str, poll_seconds: int = 1, _base_url: str= "https://sturdystatistics.com/api/text/v1/job"):
+                 job_id: str, poll_seconds: int = 1, 
+                 msgpack: bool = True,
+                 _base_url: str= "https://sturdystatistics.com/api/v1/job"):
         self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
         self.job_id = job_id
         self.poll_seconds = poll_seconds
         self.base_url = _base_url 
+        self.msgpack = msgpack
 
     def _check_status(self, info: Response) -> None:
         if info.status_code != 200:
@@ -47,10 +51,8 @@ class Job:
         return res
 
     def get_status(self):
-        res = self._get("/"+self.job_id, dict())
-        res = res.json()
-        if "result" in res:
-            res["result"] = json.loads(res["result"])
+        res = self._get("/"+self.job_id, dict(msgpack=self.msgpack))
+        res = srsly.msgpack_loads(res.content) if self.msgpack else res.json()
         return res
 
     def print_status(self):

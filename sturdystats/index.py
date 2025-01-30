@@ -32,7 +32,7 @@ class Index:
     ):
 
         self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
-        self.base_url = _base_url or "https://sturdystatistics.com/api/text/v1/index"
+        self.base_url = _base_url or "https://sturdystatistics.com/api/v1/text/index"
 
         self.name = name
         self.id = id
@@ -58,7 +58,7 @@ class Index:
 
 
     def _job_base_url(self) -> str:
-        return self.base_url.replace("/index", "/job")
+        return self.base_url.replace("text/index", "job")
 
     def _check_status(self, info: Response) -> None:
         if info.status_code != 200:
