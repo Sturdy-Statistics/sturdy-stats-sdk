@@ -2,7 +2,7 @@ import numpy as np
 import requests
 import os
 import tempfile
-from typing import Dict 
+from typing import Dict, Optional 
 from requests.models import Response
 
 import srsly
@@ -13,7 +13,7 @@ from sturdystats.job import Job
 _base_url = "https://sturdystatistics.com/api/v1/numeric"
 
 class _BaseModel:
-    def __init__(self, API_key: str, model_type: str, _base_url: str = _base_url):
+    def __init__(self, model_type: str, API_key: Optional[str] = None, _base_url: str = _base_url):
         self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
         self.base_url = _base_url 
         self.model_type = model_type
@@ -47,9 +47,9 @@ class _BaseModel:
         return self.base_url.replace("numeric", "job")
 
 class LinearRegressor(_BaseModel):
-    def __init__(self, API_key: str, _base_url: str= _base_url, ):
-        super().__init__(API_key, "linear", _base_url)
+    def __init__(self, API_key: Optional[str] = None, _base_url: str= _base_url, ):
+        super().__init__("linear", API_key, _base_url)
 
 class LogisticRegressor(_BaseModel):
-    def __init__(self, API_key: str, _base_url: str = _base_url):
-        super().__init__(API_key, "logistic", _base_url)
+    def __init__(self, API_key: Optional[str], _base_url: str = _base_url):
+        super().__init__("logistic", API_key, _base_url)
