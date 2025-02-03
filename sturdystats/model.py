@@ -51,5 +51,9 @@ class LinearRegressor(_BaseModel):
         super().__init__("linear", API_key, _base_url)
 
 class LogisticRegressor(_BaseModel):
-    def __init__(self, API_key: Optional[str], _base_url: str = _base_url):
+    def __init__(self, API_key: Optional[str] = None, _base_url: str = _base_url):
         super().__init__("logistic", API_key, _base_url)
+
+class SturdyLogisticRegressor(_BaseModel):
+    def __init__(self, API_key: Optional[str] = None, _base_url: str = _base_url):
+        super().__init__("sturdy", API_key, _base_url)

@@ -15,7 +15,7 @@ from spacy.tokens import Doc, Span, Token, DocBin
 
 
 # for type checking
-from typing import Optional, Iterable, Dict
+from typing import Literal, Optional, Iterable, Dict
 from requests.models import Response
 
 
@@ -278,6 +278,29 @@ class Index:
             results.extend(info["result"]["results"])
         if commit: self.commit()
         return results
+
+    def ingestIntegration(self,
+        query: str,
+        engine: Literal["academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
+        start_date: str | None = None, 
+        end_date: str | None = None,
+        args: dict = dict(),
+        commit: bool = True,
+        wait: bool = True,
+    ):
+        assert engine in ["academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
+        params = dict(q=query, engine=engine) 
+        if start_date is not None: params["start_date"] = start_date
+        if end_date is not None: params["end_date"] = end_date 
+        params = params | args
+        info = self._post(f"/{self.id}/doc/integration", params)
+        job_id = info.json()["job_id"]
+        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
+        if not wait: return job
+        res = job.wait()
+        if commit:
+            self.commit()
+        return res
 
 
     def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: bool = True):
