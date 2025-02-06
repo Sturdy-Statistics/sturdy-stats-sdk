@@ -414,6 +414,8 @@ class Index:
         ascending: bool = False,
         context: int = 0,
         max_excerpts_per_doc: int = 1,
+        semantic_search_weight: float = .3,
+        semantic_search_cutoff = .05,
         override_args: dict = dict()
     ):
         params = dict(
@@ -423,7 +425,9 @@ class Index:
             ascending=ascending,
             filters=filters,
             context=context,
-            max_excerpts_per_doc=max_excerpts_per_doc
+            max_excerpts_per_doc=max_excerpts_per_doc,
+            semantic_search_weight=semantic_search_weight,
+            semantic_search_cutoff=semantic_search_cutoff,
         )
         if search_query is not None:
             params["query"] = search_query
@@ -477,8 +481,22 @@ class Index:
             self.pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()).content)
         return self.pandata
 
-    def queryMeta(self, query: str):
-        return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", dict(q=query)).content)
+    def queryMeta(
+            self,
+            query: str, 
+            search_query: str = "",
+            semantic_search_weight: float = .3,
+            semantic_search_cutoff = .05,
+            override_args: dict = dict()
+    ):
+        params = dict(
+            q=query,
+            search_query=search_query,
+            semantic_search_weight=semantic_search_weight,
+            semantic_search_cutoff=semantic_search_cutoff,
+        )
+        params = {**params, **override_args}
+        return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)
     
     def annotate(self):
         self._post(f"/{self.id}/annotate", dict())
@@ -504,40 +522,47 @@ class Index:
         self,
         query: str = "",
         filters: str = "",
-        doc_ids: list[str] = [],
-        limit: int = 100
+        limit: int = 100,
+        semantic_search_weight: float = .3,
+        semantic_search_cutoff = .05,
+        override_args: dict = dict()
     ):
         params = dict(
             query=query,
             filters=filters,
-            doc_ids=doc_ids,
             limit=limit,
+            semantic_search_weight=semantic_search_weight,
+            fuzzy_match_futoff=semantic_search_cutoff,
         )
+        params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/search", params)
         return res.json()
 
 
     def topicDiff(
         self,
-        q1: str,
-        q2: str = "",
+        filter1: str,
+        filter2: str = "",
+        search_query1: str = "",
+        search_query2: str = "",
         limit: int = 50,
         cutoff: float = 1.0,
         min_confidence: float = 95,
-        search_query1: str = "",
-        search_query2: str = "",
+        semantic_search_weight: float = .3,
+        semantic_search_cutoff = .05,
         override_args: dict = dict()
     ):
         params = dict(
-            q1=q1,
+            filter1=filter1,
+            filter2=filter2,
             limit=limit,
             cutoff=cutoff,
             min_confidence=min_confidence,
             search_query1=search_query1,
-            search_query2=search_query2
+            search_query2=search_query2,
+            semantic_search_weight=semantic_search_weight,
+            fuzzy_match_futoff=semantic_search_cutoff,
         )
-        if len(q2.strip()) > 0:
-            params["q2"] = q2
         params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/diff", params)
         return res.json()
