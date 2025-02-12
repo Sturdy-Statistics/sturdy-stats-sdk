@@ -281,14 +281,14 @@ class Index:
 
     def ingestIntegration(self,
         query: str,
-        engine: Literal["academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
+        engine: Literal["academic_search", "earnings_calls", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
         start_date: str | None = None, 
         end_date: str | None = None,
         args: dict = dict(),
         commit: bool = True,
         wait: bool = True,
     ):
-        assert engine in ["academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
+        assert engine in ["earnings_calls", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
         params = dict(q=query, engine=engine) 
         if start_date is not None: params["start_date"] = start_date
         if end_date is not None: params["end_date"] = end_date 
