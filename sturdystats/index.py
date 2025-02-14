@@ -279,6 +279,17 @@ class Index:
         if commit: self.commit()
         return results
 
+    def deleteDocs(
+        self,
+        doc_ids: list[str],
+        override_args: dict = dict()
+    ):
+        assert len(doc_ids) > 0
+        params = dict()
+        params = {**params, **override_args}
+        joined = ",".join(doc_ids)
+        return self._post(f"/{self.id}/doc/delete/{joined}", params).json()
+
     def ingestIntegration(self,
         query: str,
         engine: Literal["academic_search", "earnings_calls", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
