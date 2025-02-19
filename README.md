@@ -15,7 +15,7 @@ import pandas as pd
 
 API_KEY = "XXX"
 df = pd.read_parquet('XXX')
-index = Index(API_key=API_KEY, name='XXX')
+index = Index(API_key=API_KEY, name='DEMO')
 
 res = index.upload(df.to_dict("records"))
 job = index.train(params=dict(), fast=True, wait=True)
@@ -47,5 +47,22 @@ GROUP BY quarter
 ORDER BY quarter""") )
 ```
 
+Train robust linear models.
+```python
+from sturdystats.model import SturdyLinearRegression
+import arviz as az
 
+model = LinearRegression(API_key=API_KEY)
+samples = model.sample(self.X, self.Y, additional_args=" MCMC/burn_in=20 MCMC/sample=20 ")
+az.plot_trace(samples)
+```
 
+Detect mislabelled datapoints.
+```python
+from sturdystats.model import SturdyLogisticRegression 
+import arviz as az
+
+model = SturdyLogisticRegressor(API_key=API_KEY)
+samples = model.sample(self.X, self.Y, additional_args=" MCMC/burn_in=20 MCMC/sample=20 ")
+az.plot_trace(samples)
+```
