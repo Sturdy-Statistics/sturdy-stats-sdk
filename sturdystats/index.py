@@ -543,7 +543,7 @@ class Index:
             filters=filters,
             limit=limit,
             semantic_search_weight=semantic_search_weight,
-            fuzzy_match_futoff=semantic_search_cutoff,
+            semantic_search_cutoff=semantic_search_cutoff,
         )
         params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/search", params)
@@ -572,7 +572,7 @@ class Index:
             search_query1=search_query1,
             search_query2=search_query2,
             semantic_search_weight=semantic_search_weight,
-            fuzzy_match_futoff=semantic_search_cutoff,
+            semantic_search_cutoff=semantic_search_cutoff,
         )
         params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/diff", params)
