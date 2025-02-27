@@ -43,17 +43,17 @@ class Job:
         res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
         return res
 
-    #@retry(wait=wait_exponential(),
-    #       stop=(stop_after_delay(2)))
+    @retry(wait=wait_exponential(),
+           stop=(stop_after_delay(2)))
     def _get(self, url: str, params: Dict) -> Response:
         res = self._get_retry(url, params)
         self._check_status(res)
         return res
 
-    def get_status(self):
+    def get_status(self) -> dict:
         res = self._get("/"+self.job_id, dict(msgpack=self.msgpack))
         res = srsly.msgpack_loads(res.content) if self.msgpack else res.json()
-        return res
+        return res # type: ignore
 
     def print_status(self):
         st = self.get_status()
@@ -70,7 +70,7 @@ class Job:
         status = self.get_status()
         return status["status"] not in ["FAILED", "SUCCEEDED", "CANCELLED"]
 
-    def wait(self):
+    def wait(self) -> dict:
         poll_seconds = .5
         while True:
             if not self._is_running():
@@ -82,5 +82,5 @@ class Job:
             raise Exception(f"Job {self.job_id} failed with the following error: {status['error']}")
         return status
 
-    def cancel(self):
-        return self._post(f"/{self.job_id}/cancel", dict())
+    def cancel(self) -> dict:
+        return self._post(f"/{self.job_id}/cancel", dict()).json()

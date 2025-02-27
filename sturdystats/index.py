@@ -9,19 +9,19 @@ from more_itertools import chunked     # to batch data for API calls
 from tenacity import (
     retry,
     stop_after_attempt,
+    wait_exponential
 ) 
 from spacy.tokens import Doc, Span, Token, DocBin
+import pandas as pd
 
 
 
 # for type checking
-from typing import Literal, Optional, Iterable, Dict
+from typing import Literal, Optional, Iterable, Dict, overload
 from requests.models import Response
 
 
 class Index:
-
-    ## TODO support id based loading as well if already exists
     def __init__(
             self,
             API_key: Optional[str] = None,
@@ -64,7 +64,8 @@ class Index:
         if info.status_code != 200:
             raise requests.HTTPError(info.content)
 
-    #@retry(stop=(stop_after_attempt(3)))
+    @retry(wait=wait_exponential(),
+           stop=(stop_after_attempt(2)))
     def _post(self, url: str, params: Dict) -> Response:
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
@@ -160,7 +161,11 @@ class Index:
         else:
             return self._get_status(index_name=self.name)
 
-    def commit(self, wait: bool = True):
+    @overload
+    def commit(self, wait: Literal[True] = True) -> dict: ...
+    @overload
+    def commit(self, wait: Literal[False] = False) -> Job: ...
+    def commit(self, wait: bool = True) -> Job | dict:
         """
         """
         self._print(f"""committing changes to index "{self.id}"...""")
@@ -178,7 +183,11 @@ class Index:
             return job
         return job.wait()
 
-    def unstage(self, wait: bool = True):
+    @overload
+    def unstage(self, wait: Literal[True] = True) -> dict: ...
+    @overload
+    def unstage(self, wait: Literal[False] = False) -> Job: ...
+    def unstage(self, wait: bool = True) -> Job | dict:
         """
         """
         self._print(f"""unstaging changes to index "{self.id}"...""") 
@@ -209,7 +218,7 @@ class Index:
     def upload(self,
               records: Iterable[Dict],
               batch_size: int = 1000,
-              commit: bool = True):
+              commit: bool = True) -> list[dict]:
         """Uploads documents to the index and commit them for
     permanent storage.  Documents are processed by the AI model if the
     index has been trained.
@@ -283,7 +292,7 @@ class Index:
         self,
         doc_ids: list[str],
         override_args: dict = dict()
-    ):
+    ) -> dict:
         assert len(doc_ids) > 0
         params = dict()
         params = {**params, **override_args}
@@ -291,30 +300,37 @@ class Index:
         return self._post(f"/{self.id}/doc/delete/{joined}", params).json()
 
     def ingestIntegration(self,
-        query: str,
         engine: Literal["academic_search", "earnings_calls", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
+        query: str,
         start_date: str | None = None, 
         end_date: str | None = None,
         args: dict = dict(),
         commit: bool = True,
         wait: bool = True,
-    ):
+    ) -> Job| dict:
         assert engine in ["earnings_calls", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
         params = dict(q=query, engine=engine) 
         if start_date is not None: params["start_date"] = start_date
         if end_date is not None: params["end_date"] = end_date 
         params = params | args
+        self._print("uploading data to index...")
         info = self._post(f"/{self.id}/doc/integration", params)
         job_id = info.json()["job_id"]
         job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
         if not wait: return job
         res = job.wait()
         if commit:
+            self._print("committing data to index ...")
             self.commit()
         return res
 
 
-    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: bool = True):
+
+    @overload
+    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: Literal[True] = True) -> dict: ...
+    @overload
+    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: Literal[False] = False) -> Job: ...
+    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: bool = True) -> Job | dict:
         """Trains an AI model on all documents in the production
     index. Once an index has been trained, documents are queryable,
     and the model automatically processes subsequently uploaded
@@ -373,7 +389,7 @@ class Index:
 
 
 
-    def predict(self, records: Iterable[Dict], batch_size: int = 1000):
+    def predict(self, records: Iterable[Dict], batch_size: int = 1000) -> list[dict]:
         """"Predict" function analogous to sklearn or keras: accepts
     a batch of documents and returns their corresponding predictions.
 
@@ -426,9 +442,10 @@ class Index:
         context: int = 0,
         max_excerpts_per_doc: int = 1,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff = .05,
-        override_args: dict = dict()
-    ):
+        semantic_search_cutoff: float = .05,
+        override_args: dict = dict(),
+        return_df: bool = True
+    ) -> pd.DataFrame:
         params = dict(
             offset=offset,
             limit=limit,
@@ -448,7 +465,14 @@ class Index:
             params["topic_group_id"] = topic_group_id
         params = {**params, **override_args}
         res = self._get(f"/{self.id}/doc", params)
-        return res.json()
+        res2 = res.json()["docs"]
+        if not return_df: return res2
+        elif len(res2) == 0: return pd.DataFrame(res2)
+        res3 = [ r["metadata"] | r  for r in res2 ]
+        df = pd.DataFrame(res3)
+        front = [ "doc_id", "text" ]
+        return df[[ *front, *[c for c in df.columns if c not in front ]]]
+        
 
     def getDocs(
         self,
@@ -457,8 +481,9 @@ class Index:
         topic_id: Optional[int] = None,
         topic_group_id: Optional[int] = None,
         context: int = 0,
-        override_args: dict = dict()
-    ):
+        override_args: dict = dict(),
+        return_df: bool = True,
+    ) -> pd.DataFrame:
         assert len(doc_ids) > 0
         params = dict(context=context)
         if search_query is not None:
@@ -469,12 +494,19 @@ class Index:
             params["topic_group_id"] = topic_group_id
         params = {**params, **override_args}
         joined = ",".join(doc_ids)
-        return self._get(f"/{self.id}/doc/{joined}", params).json()
+        res = self._get(f"/{self.id}/doc/{joined}", params).json()
+        res2 = res["docs"]
+        if not return_df: return res2
+        if len(res2) == 0: return pd.DataFrame(res2)
+        res3 = [ r["metadata"] | r  for r in res2 ]
+        df = pd.DataFrame(res3)
+        front = [ "doc_id", "text" ]
+        return df[[ *front, *[c for c in df.columns if c not in front ]]]
 
     def getDocsBinary(
         self,
         doc_ids: list[str],
-    ):
+    ) -> DocBin:
         assert len(doc_ids) > 0
         joined = ",".join(doc_ids)
         docbin = DocBin().from_bytes(self._get(f"/{self.id}/doc/binary/{joined}", dict()).content)
@@ -487,19 +519,20 @@ class Index:
 
     def getPandata(
         self,
-    ):
+    ) -> dict:
         if self.pandata is None:
             self.pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()).content)
-        return self.pandata
+        return self.pandata # type: ignore
 
     def queryMeta(
             self,
             query: str, 
             search_query: str = "",
             semantic_search_weight: float = .3,
-            semantic_search_cutoff = .05,
-            override_args: dict = dict()
-    ):
+            semantic_search_cutoff: float = .05,
+            override_args: dict = dict(),
+            return_df: bool = True
+    ) -> pd.DataFrame:
         params = dict(
             q=query,
             search_query=search_query,
@@ -507,7 +540,9 @@ class Index:
             semantic_search_cutoff=semantic_search_cutoff,
         )
         params = {**params, **override_args}
-        return srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)
+        res = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)
+        if not return_df: return res
+        return pd.DataFrame(res)
     
     def annotate(self):
         self._post(f"/{self.id}/annotate", dict())
@@ -517,17 +552,17 @@ class Index:
                 break
             time.sleep(3)
 
-    def clone(self, new_name):
+    def clone(self, new_name) -> dict:
         info = self._post(f"/{self.id}/clone", dict(new_name=new_name))
         job_id = info.json()["job_id"]
         job = Job(self.API_key, job_id, 20, _base_url=self._job_base_url())
         return job.wait()
 
-    def delete(self, force: bool):
+    def delete(self, force: bool) -> dict:
         if not force:
             print("Are you sure you want to delete this index? There is no going back")
             return
-        return self._post(f"/{self.id}/delete", dict())
+        return self._post(f"/{self.id}/delete", dict()).json()
 
     def topicSearch(
         self,
@@ -535,9 +570,10 @@ class Index:
         filters: str = "",
         limit: int = 100,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff = .05,
-        override_args: dict = dict()
-    ):
+        semantic_search_cutoff: float = .05,
+        override_args: dict = dict(),
+        return_df: bool = True
+    ) -> pd.DataFrame:
         params = dict(
             query=query,
             filters=filters,
@@ -546,8 +582,9 @@ class Index:
             semantic_search_cutoff=semantic_search_cutoff,
         )
         params = {**params, **override_args}
-        res = self._get(f"/{self.id}/topic/search", params)
-        return res.json()
+        res = self._get(f"/{self.id}/topic/search", params).json()["topics"]
+        if not return_df: return res
+        return pd.DataFrame(res)
 
 
     def topicDiff(
@@ -560,9 +597,10 @@ class Index:
         cutoff: float = 1.0,
         min_confidence: float = 95,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff = .05,
-        override_args: dict = dict()
-    ):
+        semantic_search_cutoff: float = .05,
+        override_args: dict = dict(),
+        return_df: bool = True
+    ) -> pd.DataFrame:
         params = dict(
             filter1=filter1,
             filter2=filter2,
@@ -575,15 +613,17 @@ class Index:
             semantic_search_cutoff=semantic_search_cutoff,
         )
         params = {**params, **override_args}
-        res = self._get(f"/{self.id}/topic/diff", params)
-        return res.json()
+        res = self._get(f"/{self.id}/topic/diff", params).json()["topics"]
+        if not return_df: return res
+        return pd.DataFrame(res)
 
     def listJobs(
         self,
         status: str= "RUNNING",
         job_name: Optional[str] = None,
         only_current_index: bool = True,
-    ):
+        return_df: bool = True,
+    ) -> pd.DataFrame:
         assert status in [None, "", "RUNNING", "FAILED", "SUCCEEDED", "PENDING"]
         assert job_name in [None, "", "trainIndex", "commitIndex", "unstageIndex", "writeDocs"]
         params = dict()
@@ -595,14 +635,16 @@ class Index:
             params["job_name"] = job_name
 
         job = Job(self.API_key, "", 1, _base_url=self._job_base_url())
-        res = job._get("", params)
-        return res.json()
+        res = job._get("", params).json()
+        if not return_df: return res
+        return pd.DataFrame(res)
 
     def listIndices(
         self,
         name_filter: Optional[str] = None,
         state_filter: Optional[str] = None,
-    ):
+        return_df: bool = True,
+    ) -> pd.DataFrame:
         res = self._get("", dict()).json()
         results = []
         for r in res:
@@ -611,4 +653,5 @@ class Index:
             if state_filter is not None and state_filter != r["state"]:
                 continue
             results.append(r)
-        return results
+        if not return_df: return results
+        return pd.DataFrame(results)
