@@ -440,7 +440,7 @@ class Index:
         sort_by: str = "relevance",
         ascending: bool = False,
         context: int = 0,
-        max_excerpts_per_doc: int = 1,
+        max_excerpts_per_doc: int = 5,
         semantic_search_weight: float = .3,
         semantic_search_cutoff: float = .05,
         override_args: dict = dict(),
@@ -480,12 +480,13 @@ class Index:
         search_query: Optional[str] = None,
         topic_id: Optional[int] = None,
         topic_group_id: Optional[int] = None,
+        max_excerpts_per_doc: int = 5,
         context: int = 0,
         override_args: dict = dict(),
         return_df: bool = True,
     ) -> pd.DataFrame:
         assert len(doc_ids) > 0
-        params = dict(context=context)
+        params = dict(context=context, max_excerpts_per_doc=max_excerpts_per_doc)
         if search_query is not None:
             params["query"] = search_query
         if topic_id is not None:
