@@ -24,14 +24,17 @@ from requests.models import Response
 class Index:
     def __init__(
             self,
-            API_key: Optional[str] = None,
+            API_key: Optional[str] = os.environ.get("STURDY_STATS_API_KEY"),
             name: Optional[str] = None,
             id: Optional[str] = None,
             _base_url: Optional[str] = None,
             verbose: bool = True
     ):
 
-        self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
+        if API_key is None:
+            raise ValueError("You must either set the environment variable STURDY_STATS_API_KEY or pass in an API_key directly. \
+Go to https://sturdystatistics.com to get your free api key today.")
+        self.API_key = API_key 
         self.base_url = _base_url or "https://sturdystatistics.com/api/v1/text/index"
 
         self.name = name
@@ -48,6 +51,7 @@ class Index:
             self.id = self._create(self.name)
             self._print(f"""Created new index with id="{self.id}".""")
         else:
+            self.name = status["name"]
             self.id = status["id"]
             self._print(f"""Found an existing index with id="{self.id}".""")
         self.pandata = None
@@ -300,7 +304,7 @@ class Index:
         return self._post(f"/{self.id}/doc/delete/{joined}", params).json()
 
     def ingestIntegration(self,
-        engine: Literal["academic_search", "earnings_calls", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
+        engine: Literal["academic_search", "hackernews_comments", "earnings_calls", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
         query: str,
         start_date: str | None = None, 
         end_date: str | None = None,
@@ -308,7 +312,7 @@ class Index:
         commit: bool = True,
         wait: bool = True,
     ) -> Job| dict:
-        assert engine in ["earnings_calls", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
+        assert engine in ["earnings_calls", "hackernews_comments", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
         params = dict(q=query, engine=engine) 
         if start_date is not None: params["start_date"] = start_date
         if end_date is not None: params["end_date"] = end_date 
@@ -412,7 +416,7 @@ class Index:
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc \
         #   -H "Content-Type: application/json" \
-        #   -d '{
+        #   -d 10,
         #      "api_key": "API_KEY",
         #      "save": "false",
         #      "docs": JSON_DOC_DATA
@@ -442,7 +446,7 @@ class Index:
         context: int = 0,
         max_excerpts_per_doc: int = 5,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff: float = .05,
+        semantic_search_cutoff: float = .1,
         override_args: dict = dict(),
         return_df: bool = True
     ) -> pd.DataFrame:
@@ -530,7 +534,7 @@ class Index:
             query: str, 
             search_query: str = "",
             semantic_search_weight: float = .3,
-            semantic_search_cutoff: float = .05,
+            semantic_search_cutoff: float = .1,
             override_args: dict = dict(),
             return_df: bool = True
     ) -> pd.DataFrame:
@@ -571,7 +575,7 @@ class Index:
         filters: str = "",
         limit: int = 100,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff: float = .05,
+        semantic_search_cutoff: float = .1,
         override_args: dict = dict(),
         return_df: bool = True
     ) -> pd.DataFrame:
@@ -598,7 +602,7 @@ class Index:
         cutoff: float = 1.0,
         min_confidence: float = 95,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff: float = .05,
+        semantic_search_cutoff: float = .1,
         override_args: dict = dict(),
         return_df: bool = True
     ) -> pd.DataFrame:

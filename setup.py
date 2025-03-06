@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="sturdy-stats-sdk",
-    version="1.0.29",
+    version="1.0.30",
     author="Kian Ghodoussi",
     author_email="ghodoussikian@gmail.com",
     description="SDK for the Sturdy Statistics API",
