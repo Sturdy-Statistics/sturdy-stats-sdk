@@ -323,7 +323,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         commit: bool = True,
         wait: bool = True,
     ) -> Job| dict:
-        assert engine in ["earnings_calls", "hackernews_comments", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
+        assert engine in ["earnings_calls", "hackernews_comments", "hackernews_story", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
         params = dict(q=query, engine=engine) 
         if start_date is not None: params["start_date"] = start_date
         if end_date is not None: params["end_date"] = end_date 
