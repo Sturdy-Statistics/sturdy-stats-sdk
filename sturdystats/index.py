@@ -304,7 +304,18 @@ Go to https://sturdystatistics.com to get your free api key today.")
         return self._post(f"/{self.id}/doc/delete/{joined}", params).json()
 
     def ingestIntegration(self,
-        engine: Literal["academic_search", "hackernews_comments", "earnings_calls", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"],
+        engine: Literal[
+            "academic_search", 
+            "hackernews_comments", 
+            "hackernews_story", 
+            "earnings_calls", 
+            "author_cn", 
+            "news_date_split", 
+            "google", 
+            "google_news", 
+            "reddit", 
+            "cn_all"
+        ],
         query: str,
         start_date: str | None = None, 
         end_date: str | None = None,
@@ -629,8 +640,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         only_current_index: bool = True,
         return_df: bool = True,
     ) -> pd.DataFrame:
-        assert status in [None, "", "RUNNING", "FAILED", "SUCCEEDED", "PENDING"]
-        assert job_name in [None, "", "trainIndex", "commitIndex", "unstageIndex", "writeDocs"]
+        assert status in [None, "", "RUNNING", "FAILED", "SUCCEEDED", "PENDING", "CANCELLED"]
         params = dict()
         if only_current_index:
             params["index_id"] = self.id
