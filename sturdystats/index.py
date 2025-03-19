@@ -547,7 +547,8 @@ Go to https://sturdystatistics.com to get your free api key today.")
             semantic_search_weight: float = .3,
             semantic_search_cutoff: float = .1,
             override_args: dict = dict(),
-            return_df: bool = True
+            return_df: bool = True,
+            paginate: bool = False
     ) -> pd.DataFrame:
         params = dict(
             q=query,
@@ -556,9 +557,18 @@ Go to https://sturdystatistics.com to get your free api key today.")
             semantic_search_cutoff=semantic_search_cutoff,
         )
         params = {**params, **override_args}
-        res = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)
-        if not return_df: return res
-        return pd.DataFrame(res)
+        finalRes = []
+        if not paginate:
+            finalRes = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content) # type: ignore
+        else:
+            while True:
+                params["q"] = query + f"\nOFFSET {len(finalRes)}"
+                res: list[dict] = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content) # type: ignore
+                if len(res) == 0: break
+                finalRes.extend(res)
+
+        if not return_df: return finalRes
+        return pd.DataFrame(finalRes)
     
     def annotate(self):
         self._post(f"/{self.id}/annotate", dict())
@@ -605,7 +615,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
 
     def topicDiff(
         self,
-        filter1: str,
+        filter1: str = "",
         filter2: str = "",
         search_query1: str = "",
         search_query2: str = "",

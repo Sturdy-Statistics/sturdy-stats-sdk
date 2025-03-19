@@ -1,7 +1,6 @@
 import requests
 import os
 from time import sleep
-import json
 
 import pandas as pd
 import srsly

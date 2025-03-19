@@ -8,9 +8,19 @@ from requests.models import Response
 import srsly
 import arviz as az
 
-from sturdystats.job import Job
+from sturdystats.job import Job 
+
 
 _base_url = "https://sturdystatistics.com/api/v1/numeric"
+
+class RegressionResult(Job):
+    def getTrace(self):
+        bdata: bytes = self.wait()["result"] #type: ignore
+        with tempfile.TemporaryDirectory() as tempdir:
+            with open(tempdir+"netcdf", "wb") as handle:
+                handle.write(bdata)
+        return az.from_netcdf(tempdir+"netcdf")
+
 
 class _BaseModel:
     def __init__(self, model_type: str, API_key: Optional[str] = None, _base_url: str = _base_url):
@@ -34,7 +44,7 @@ class _BaseModel:
         Y = np.array(Y)
         data = dict(X=X, Y=Y, override_args=additional_args)
         job_id = self._post(f"/{self.model_type}", data).json()["job_id"]
-        job = Job(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url())
+        job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url())
         if background:
             return job
         bdata: bytes = job.wait()["result"] #type: ignore
