@@ -535,9 +535,13 @@ Go to https://sturdystatistics.com to get your free api key today.")
 
     def getPandata(
         self,
+        field: str | None = None,
+        override_args: dict = dict(),
     ) -> dict:
+        params = dict(field=field)
+        params = {**params, **override_args}
         if self.pandata is None:
-            self.pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", dict()).content)
+            self.pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", params).content)
         return self.pandata # type: ignore
 
     def queryMeta(
@@ -640,6 +644,32 @@ Go to https://sturdystatistics.com to get your free api key today.")
         )
         params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/diff", params).json()["topics"]
+        if not return_df: return res
+        return pd.DataFrame(res)
+
+    def topicWords(
+        self,
+        override_args: dict = dict(),
+        return_df: bool = True
+    ) -> pd.DataFrame:
+        params = dict(
+        )
+        params = {**params, **override_args}
+        res = self._get(f"/{self.id}/topic/words", params).json()["topics"]
+        if not return_df: return res
+        return pd.DataFrame(res)
+
+    def docTopics(
+        self,
+        doc: str,
+        override_args: dict = dict(),
+        return_df: bool = True
+    ) -> pd.DataFrame:
+        params = dict(
+        )
+        params = dict(doc=doc)
+        params = {**params, **override_args}
+        res = self._get(f"/{self.id}/topic/doc", params).json()["topics"]
         if not return_df: return res
         return pd.DataFrame(res)
 
