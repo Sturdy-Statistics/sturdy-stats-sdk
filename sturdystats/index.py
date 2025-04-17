@@ -20,7 +20,6 @@ import pandas as pd
 from typing import Literal, Optional, Iterable, Dict, overload
 from requests.models import Response
 
-
 class Index:
     def __init__(
             self,
@@ -28,7 +27,7 @@ class Index:
             name: Optional[str] = None,
             id: Optional[str] = None,
             _base_url: Optional[str] = None,
-            verbose: bool = True
+            verbose: bool = True,
     ):
 
         if API_key is None:
@@ -55,6 +54,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
             self.id = status["id"]
             self._print(f"""Found an existing index with id="{self.id}".""")
         self.pandata = None
+
 
 
     def _print(self, *msg):
@@ -457,7 +457,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         context: int = 0,
         max_excerpts_per_doc: int = 5,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff: float = .1,
+        semantic_search_cutoff: float = .2,
         override_args: dict = dict(),
         return_df: bool = True
     ) -> pd.DataFrame:
@@ -549,10 +549,10 @@ Go to https://sturdystatistics.com to get your free api key today.")
             query: str, 
             search_query: str = "",
             semantic_search_weight: float = .3,
-            semantic_search_cutoff: float = .1,
+            semantic_search_cutoff: float = .2,
             override_args: dict = dict(),
             return_df: bool = True,
-            paginate: bool = False
+            paginate: bool = False,
     ) -> pd.DataFrame:
         params = dict(
             q=query,
@@ -563,11 +563,12 @@ Go to https://sturdystatistics.com to get your free api key today.")
         params = {**params, **override_args}
         finalRes = []
         if not paginate:
-            finalRes = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content) # type: ignore
+            finalRes = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)["results"] # type: ignore
         else:
             while True:
-                params["q"] = query + f"\nOFFSET {len(finalRes)}"
-                res: list[dict] = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content) # type: ignore
+                params["q"] = query 
+                params["offset"] = len(finalRes) 
+                res: list[dict] = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)["results"] # type: ignore
                 if len(res) == 0: break
                 finalRes.extend(res)
 
@@ -600,7 +601,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         filters: str = "",
         limit: int = 100,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff: float = .1,
+        semantic_search_cutoff: float = .2,
         override_args: dict = dict(),
         return_df: bool = True
     ) -> pd.DataFrame:
@@ -627,7 +628,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         cutoff: float = 1.0,
         min_confidence: float = 95,
         semantic_search_weight: float = .3,
-        semantic_search_cutoff: float = .1,
+        semantic_search_cutoff: float = .2,
         override_args: dict = dict(),
         return_df: bool = True
     ) -> pd.DataFrame:
