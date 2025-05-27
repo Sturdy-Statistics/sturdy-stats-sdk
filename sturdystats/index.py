@@ -182,7 +182,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         #    }'
         info = self._post(f"/{self.id}/doc/commit", dict())
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 20, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
         if not wait:
             return job
         return job.wait()
@@ -204,7 +204,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
         #    }'
         info = self._post(f"/{self.id}/doc/unstage", dict())
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
         if not wait:
             return job
         return job.wait()
@@ -215,7 +215,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
             raise RuntimeError(f"""The maximum batch size is 1000 documents.""")
         info = self._post(f"/{self.id}/doc", dict(docs=records, save=save))
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
         return job.wait()
 
 
@@ -322,21 +322,18 @@ Go to https://sturdystatistics.com to get your free api key today.")
         args: dict = dict(),
         commit: bool = True,
         wait: bool = True,
-    ) -> Job| dict:
+    ) -> Job | dict:
         assert engine in ["earnings_calls", "hackernews_comments", "hackernews_story", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
-        params = dict(q=query, engine=engine) 
+        params = dict(q=query, engine=engine, commit=commit) 
         if start_date is not None: params["start_date"] = start_date
         if end_date is not None: params["end_date"] = end_date 
         params = params | args
         self._print("uploading data to index...")
         info = self._post(f"/{self.id}/doc/integration", params)
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
         if not wait: return job
         res = job.wait()
-        if commit:
-            self._print("committing data to index ...")
-            self.commit()
         return res
 
 
@@ -380,10 +377,13 @@ Go to https://sturdystatistics.com to get your free api key today.")
             self._print(f"index {self.name} is already trained.")
             return status
 
+        poll = 5
         if fast:
-            params["K"] = params.get("K", 96)
+            params["K"] = params.get("K", 48)
             params["burn_in"] = params.get("burn_in", 1000)
             params["model_args"] = " MCMC/sample_a_start=100000 " + params.get("model_args", "")
+            params["fast"] = True
+            poll = 1
 
         # Issue a training command to the index.  Equivalent to:
         #
@@ -396,7 +396,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
 
         info = self._post(f"/{self.id}/train", params)
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 30, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, poll, _base_url=self._job_base_url())
         if wait:
             return job.wait()
         else:
@@ -586,7 +586,7 @@ Go to https://sturdystatistics.com to get your free api key today.")
     def clone(self, new_name) -> dict:
         info = self._post(f"/{self.id}/clone", dict(new_name=new_name))
         job_id = info.json()["job_id"]
-        job = Job(self.API_key, job_id, 20, _base_url=self._job_base_url())
+        job = Job(self.API_key, job_id, 5, _base_url=self._job_base_url())
         return job.wait()
 
     def delete(self, force: bool) -> dict:
