@@ -11,7 +11,6 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential
 ) 
-from spacy.tokens import Doc, Span, Token, DocBin
 import pandas as pd
 
 
@@ -30,10 +29,7 @@ class Index:
             verbose: bool = True,
     ):
 
-        if API_key is None:
-            raise ValueError("You must either set the environment variable STURDY_STATS_API_KEY or pass in an API_key directly. \
-Go to https://sturdystatistics.com to get your free api key today.")
-        self.API_key = API_key 
+        self.API_key = API_key or ""
         self.base_url = _base_url or "https://sturdystatistics.com/api/v1/text/index"
 
         self.name = name
@@ -522,7 +518,8 @@ Go to https://sturdystatistics.com to get your free api key today.")
     def getDocsBinary(
         self,
         doc_ids: list[str],
-    ) -> DocBin:
+    ):
+        from spacy.tokens import Doc, Span, Token, DocBin
         assert len(doc_ids) > 0
         joined = ",".join(doc_ids)
         docbin = DocBin().from_bytes(self._get(f"/{self.id}/doc/binary/{joined}", dict()).content)
