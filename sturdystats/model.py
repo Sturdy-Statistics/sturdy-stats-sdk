@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import requests
 import os
@@ -6,7 +8,6 @@ from typing import Dict, Optional
 from requests.models import Response
 
 import srsly
-import arviz as az
 
 from sturdystats.job import Job 
 
@@ -15,6 +16,7 @@ _base_url = "https://sturdystatistics.com/api/v1/numeric"
 
 class RegressionResult(Job):
     def getTrace(self):
+        import arviz as az
         bdata: bytes = self.wait()["result"] #type: ignore
         with tempfile.TemporaryDirectory() as tempdir:
             with open(tempdir+"netcdf", "wb") as handle:
@@ -39,6 +41,7 @@ class _BaseModel:
         return res
     
     def sample(self, X, Y, additional_args: str = "", background = False):
+        import arviz as az
         assert len(X) == len(Y)
         X = np.array(X)
         Y = np.array(Y)

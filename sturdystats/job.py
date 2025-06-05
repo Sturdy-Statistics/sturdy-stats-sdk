@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import requests
 import os
 from time import sleep

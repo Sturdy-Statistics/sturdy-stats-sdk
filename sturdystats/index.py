@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import requests
 import time
 import os
@@ -12,6 +14,7 @@ from tenacity import (
     wait_exponential
 ) 
 import pandas as pd
+
 
 
 
@@ -67,6 +70,8 @@ class Index:
     @retry(wait=wait_exponential(),
            stop=(stop_after_attempt(2)))
     def _post(self, url: str, params: Dict) -> Response:
+        if self.API_key is None:
+            raise ValueError("All POST requests (index creation, data upload, model training) require an API Key. Visit https://sturdystatistics.com/docs/web/api-key-creation.html to create your free API key today.")
         payload = {**params}
         res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
         self._check_status(res)
@@ -367,18 +372,18 @@ class Index:
     https://sturdystatistics.com/api/documentation#tag/apitextv1/operation/trainIndex
 
     """
-
         status = self.get_status()
         if ("untrained" != status["state"]) and not force:
             self._print(f"index {self.name} is already trained.")
             return status
 
+        job_params = {**params}
         poll = 5
         if fast:
-            params["K"] = params.get("K", 48)
-            params["burn_in"] = params.get("burn_in", 1000)
-            params["model_args"] = " MCMC/sample_a_start=100000 " + params.get("model_args", "")
-            params["fast"] = True
+            job_params["K"] = job_params.get("K", 48)
+            job_params["burn_in"] = job_params.get("burn_in", 1000)
+            job_params["model_args"] = " MCMC/sample_a_start=100000 " + job_params.get("model_args", "")
+            job_params["fast"] = True
             poll = 1
 
         # Issue a training command to the index.  Equivalent to:
@@ -390,7 +395,7 @@ class Index:
         #      PARAMS
         #    }'
 
-        info = self._post(f"/{self.id}/train", params)
+        info = self._post(f"/{self.id}/train", job_params)
         job_id = info.json()["job_id"]
         job = Job(self.API_key, job_id, poll, _base_url=self._job_base_url())
         if wait:
