@@ -33,7 +33,7 @@ class Index:
     ):
 
         self.API_key = API_key or ""
-        self.base_url = _base_url or "https://sturdystatistics.com/api/v1/text/index"
+        self.base_url = _base_url or "https://api.sturdystatistics.com/api/v1/text/index"
 
         self.name = name
         self.id = id

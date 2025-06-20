@@ -21,7 +21,7 @@ class Job:
     def __init__(self, API_key: str, 
                  job_id: str, poll_seconds: int = 1, 
                  msgpack: bool = True,
-                 _base_url: str= "https://sturdystatistics.com/api/v1/job"):
+                 _base_url: str= "https://api.sturdystatistics.com/api/v1/job"):
         self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
         self.job_id = job_id
         self.poll_seconds = poll_seconds

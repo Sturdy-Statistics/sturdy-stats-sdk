@@ -12,7 +12,7 @@ import srsly
 from sturdystats.job import Job 
 
 
-_base_url = "https://sturdystatistics.com/api/v1/numeric"
+_base_url = "https://api.sturdystatistics.com/api/v1/numeric"
 
 class RegressionResult(Job):
     def getTrace(self):
