@@ -32,7 +32,11 @@ class RegressionResult(Job):
         with tempfile.TemporaryDirectory() as tempdir:
             path = Path(tempdir) / "trace.nc"
             path.write_bytes(bdata)
-            inference_data = az.from_netcdf(path)
+
+            # force az to load the file into memory since file will be deleted
+            with az.rc_context(rc={"data.load": "eager"}):
+                inference_data = az.from_netcdf(path)
+
         return inference_data
 
 def _append_data(inference_data: az.InferenceData, X: np.ndarray, Y: np.ndarray) -> None:
