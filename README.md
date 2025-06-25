@@ -1,6 +1,6 @@
 # Sturdy Stats SDK
 
-This is the sdk for the [Sturdy Statistics API](https://sturdystatistics.com/). We host a [series of public indicies](http://localhost:8050/public-dashboards) trained on 10qs, Earnings Calls, ArXiv, HackerNews, and various news streams that anyone can use for public data analysis. Uploading data requires an API key. Please reach out to us at https://sturdystatistics.com in order to create an api key. 
+This is the sdk for the [Sturdy Statistics API](https://sturdystatistics.com/). We host a [series of public indicies](https://sturdystatistics.com/gallery) trained on Earnings Calls, ArXiv, HackerNews, and various news streams that anyone can use for public data analysis. Uploading data requires signing up at https://sturdystatistics.com in order to create an api key. 
 
 ## Installation
 
@@ -18,33 +18,23 @@ Explore our [gallery](https://sturdystatistics.com/gallery/) to browse visualiza
 
 ## Quickstart
 
-Create a Index from scratch
+#### Explore Your Data
 ```python
 from sturdystats import Index, Job
-import pandas as pd
-
-API_KEY = "XXX"
-df = pd.read_parquet('XXX')
-index = Index(API_key=API_KEY, name='DEMO')
-
-res = index.upload(df.to_dict("records"))
-job = index.train(params=dict(), fast=True, wait=True)
-```
-
-Explore Your Data
-```python
 import plotly.express as px
 
-df_topic = pd.DataFrame(index.topicSearch("")['topics'])
+index = Index(id="index_99051ff1489844878fd792784d7baa90")
+topic_df = index.topicSearch()
 fig = px.sunburst(
-    df_topic, 
+    topic_df, 
     path=["topic_group_short_title", "short_title"],
     values="prevalence", 
     hover_data=["topic_id"]
 )
 ```
 
-Run SQL queries against your unstructured ata
+
+#### Run SQL queries against your unstructured ata
 ```python
 topic_id = 12
 df = pd.DataFrame(index.queryMeta(f"""
@@ -56,7 +46,19 @@ GROUP BY quarter
 ORDER BY quarter""") )
 ```
 
-Train robust linear models.
+#### Create a Index from scratch
+```python
+from sturdystats import Index, Job
+import pandas as pd
+
+df = pd.read_parquet('data.parquet')
+index = Index(API_key="XXX", name='tech_earnings_calls_2024')
+
+res = index.upload(df.to_dict("records"))
+job = index.train(params=dict(), fast=True, wait=True)
+```
+
+#### Train robust linear models.
 
 `pip install sturdy-stats-sdk[regression]`
 
@@ -69,7 +71,7 @@ model.sample(X, Y)
 az.plot_trace(model.inference_data)
 ```
 
-Detect mislabelled datapoints.
+#### Detect mislabelled datapoints.
 ```python
 from sturdystats.model import SturdyLogisticRegressor
 import arviz as az
