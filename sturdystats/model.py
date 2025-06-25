@@ -230,8 +230,8 @@ class _BaseModel:
     def sample(self, X, Y, additional_args: str = "", background = False):
         # validate input data
         assert len(X) == len(Y)
-        X = np.array(X, copy=True)
-        Y = np.array(Y, copy=True)
+        X = np.array(X, copy=True).astype(np.float32)
+        Y = np.array(Y, copy=True).astype(np.float32)
         data = dict(X=X, Y=Y, override_args=additional_args)
 
         # submit training job and make a job object
