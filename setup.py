@@ -18,4 +18,8 @@ setuptools.setup(
     ],
     python_requires='>=3.9',
     install_requires=['more-itertools', 'srsly', 'tenacity', 'pandas', 'numpy', 'requests'],
+    extras_require={
+        'regression': ['arviz', 'xarray', 'scipy'],
+        'all': ['arviz', 'xarray', 'scipy'],
+    },
 )
