@@ -196,7 +196,7 @@ class _BaseModel:
         if "Yp" not in ps:
             raise ValueError("Returned dataset from sample_posterior_predictive() must contain 'Yp'")
 
-        return ps.mean(dim='draw')
+        return ps.mean(dim=('chain', 'draw'))
 
     def evaluate(self, X: np.ndarray, Y: np.ndarray) -> az.InferenceData:
         """
