@@ -53,6 +53,9 @@ def _append_data(
     label_names = inference_data.attrs.get("label_names")
     assert (label_names is not None) and (len(label_names) == Y.shape[1])
 
+    feature_names = inference_data.attrs.get("feature_names")
+    assert (feature_names is not None) and (len(feature_names) == X.shape[1])
+
     inference_data.add_groups(
         {
             'constant_data': xr.Dataset(
@@ -61,7 +64,7 @@ def _append_data(
                 },
                 coords={
                     "N": 1+np.arange(X.shape[0]),
-                    "dim": 1+np.arange(X.shape[1]),
+                    "dim": feature_names,
                 }),
             'observed_data': xr.Dataset(
                 data_vars={
@@ -185,17 +188,21 @@ class _BaseModel:
             xr.DataArray: Posterior mean prediction with shape (N, Q)
         """
         self._require_inference_data()
-        X = np.array(X)  # cast to np array; don't need to copy here
         ps = self.sample_posterior_predictive(X)
 
         if save:
+            X = np.array(X)  # cast to np array; don't need to copy here
+
+            feature_names = self.inference_data.attrs.get("feature_names")
+            assert (feature_names is not None) and (len(feature_names) == X.shape[1])
+
             vars = {"X":  (("N", "dim"), X)}
 
             coords = {"N": 1+np.arange(X.shape[0]),
-                      "dim": 1+np.arange(X.shape[1])}
+                      "dim": feature_names}
 
             if Y is not None:
-                assert(Y.shape[0] == X.shape[0])
+                assert Y.shape[0] == X.shape[0]
                 label_names = self.inference_data.attrs.get("label_names")
                 assert (label_names is not None) and (len(label_names) == Y.shape[1])
                 vars["Y"] = (("N", "Q"), Y)
@@ -245,6 +252,7 @@ class _BaseModel:
 
     def sample(self, X, Y,
                label_names: Optional[List] = None,
+               feature_names: Optional[List] = None,
                additional_args: str = "",
                background=False):
 
@@ -266,6 +274,15 @@ class _BaseModel:
         else:
             label_names = 1+np.arange(Y.shape[1])
 
+        if feature_names is not None:
+            assert len(feature_names) == X.shape[1], (
+                f"Mismatch in feature dimensions: X has {X.shape[1]} columns (features) but "
+                f"{len(feature_names)} feature names were provided. "
+                "Each column in X should have a corresponding feature name."
+            )
+        else:
+            feature_names = 1+np.arange(X.shape[1])
+
         data = dict(X=X, Y=Y, override_args=additional_args)
 
         # submit training job and make a job object
@@ -278,9 +295,10 @@ class _BaseModel:
 
         # wait for results: unpack into arviz dataset
         inference_data = job.getTrace()
-        inference_data = inference_data.assign_coords({"Q": label_names})
+        inference_data = inference_data.assign_coords({"Q": label_names, "dim": feature_names})
         inference_data.attrs["model_type"] = self.model_type
         inference_data.attrs["label_names"] = list(label_names)
+        inference_data.attrs["feature_names"] = list(feature_names)
         self.inference_data = inference_data
 
         # add constant data along with the posterior predictive
