@@ -57,11 +57,11 @@ def _append_data(
         {
             'constant_data': xr.Dataset(
                 data_vars={
-                    "X":  (("N", "D"), X),
+                    "X":  (("N", "dim"), X),
                 },
                 coords={
                     "N": 1+np.arange(X.shape[0]),
-                    "D": 1+np.arange(X.shape[1]),
+                    "dim": 1+np.arange(X.shape[1]),
                 }),
             'observed_data': xr.Dataset(
                 data_vars={
@@ -83,7 +83,7 @@ def _predict_regression(
 
     Parameters:
         dataset (az.InferenceData): InferenceData containing posterior `eta` and `b`.
-        X (np.ndarray): Input features, shape (N, D).
+        X (np.ndarray): Input features, shape (N, dim).
         link (callable): Link function applied to linear predictor (e.g. expit, identity).
 
     Returns:
@@ -132,7 +132,7 @@ def predict_logistic(dataset: az.InferenceData, X: np.ndarray) -> xr.Dataset:
 
     Parameters:
         dataset (az.InferenceData): Fitted model containing posterior samples of `eta` and `b`.
-        X (np.ndarray): New input data of shape (N, D), where D matches the number of features.
+        X (np.ndarray): New input data of shape (N, dim), where dim matches the number of features.
 
     Returns:
         xr.Dataset: A dataset with one variable `Yp` representing posterior predictive
@@ -150,7 +150,7 @@ def predict_linear(dataset: az.InferenceData, X: np.ndarray) -> xr.Dataset:
 
     Parameters:
         dataset (az.InferenceData): Fitted model containing posterior samples of `eta` and `b`.
-        X (np.ndarray): New input data of shape (N, D), where D matches the number of features.
+        X (np.ndarray): New input data of shape (N, dim), where dim matches the number of features.
 
     Returns:
         xr.Dataset: A dataset with one variable `Yp` representing posterior predictive
@@ -177,7 +177,7 @@ class _BaseModel:
         Compute the posterior mean prediction for new input data X.
 
         Parameters:
-            X (np.ndarray): New input features, shape (N, D).
+            X (np.ndarray): New input features, shape (N, dim).
             save (bool): If True, adds prediction results to self.inference_data under
                          'predictions' and 'predictions_constant_data'.
 
@@ -189,10 +189,10 @@ class _BaseModel:
         ps = self.sample_posterior_predictive(X)
 
         if save:
-            vars = {"X":  (("N", "D"), X)}
+            vars = {"X":  (("N", "dim"), X)}
 
             coords = {"N": 1+np.arange(X.shape[0]),
-                      "D": 1+np.arange(X.shape[1])}
+                      "dim": 1+np.arange(X.shape[1])}
 
             if Y is not None:
                 assert(Y.shape[0] == X.shape[0])
