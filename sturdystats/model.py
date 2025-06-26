@@ -7,7 +7,7 @@ import arviz as az
 import requests
 import os
 import tempfile
-from typing import Dict, Optional, Union, Callable
+from typing import Dict, Optional, Union, Callable, List
 from requests.models import Response
 
 from pathlib import Path
@@ -39,10 +39,20 @@ class RegressionResult(Job):
 
         return inference_data
 
-def _append_data(inference_data: az.InferenceData, X: np.ndarray, Y: np.ndarray) -> None:
+def _append_data(
+        inference_data: az.InferenceData,
+        X: np.ndarray,
+        Y: np.ndarray,
+) -> None:
     """Add training data (constant & observed) to an ArviZ InferenceData object.
     This modifies `inference_data` in-place and returns None.
     """
+
+    # NB this function is only called by `sample`.  X and Y are already validated.
+
+    label_names = inference_data.attrs.get("label_names")
+    assert (label_names is not None) and (len(label_names) == Y.shape[1])
+
     inference_data.add_groups(
         {
             'constant_data': xr.Dataset(
@@ -59,7 +69,7 @@ def _append_data(inference_data: az.InferenceData, X: np.ndarray, Y: np.ndarray)
                 },
                 coords={
                     "N": 1+np.arange(Y.shape[0]),
-                    "Q": 1+np.arange(Y.shape[1]),
+                    "Q": label_names,
                 })
         })
 
@@ -96,6 +106,9 @@ def _predict_regression(
 
     preds = link(theta)                                   # sample=n chain=c draw=d Q=q
 
+    label_names = dataset.attrs.get("label_names")
+    assert (label_names is not None) and (len(label_names) == preds.shape[3])
+
     # assemble predictions into a dataset with named coordinates
     ds = xr.Dataset(
         data_vars={"Yp": (("N", "chain", "draw", "Q"), preds)},
@@ -103,7 +116,7 @@ def _predict_regression(
             "N":     1+np.arange(preds.shape[0]),
             "chain": 1+np.arange(preds.shape[1]),
             "draw":  1+np.arange(preds.shape[2]),
-            "Q":     1+np.arange(preds.shape[3])}
+            "Q":     label_names}
     )
 
     # re-order coordinates to match arviz convention and return
@@ -172,6 +185,7 @@ class _BaseModel:
             xr.DataArray: Posterior mean prediction with shape (N, Q)
         """
         self._require_inference_data()
+        X = np.array(X)  # cast to np array; don't need to copy here
         ps = self.sample_posterior_predictive(X)
 
         if save:
@@ -182,8 +196,10 @@ class _BaseModel:
 
             if Y is not None:
                 assert(Y.shape[0] == X.shape[0])
+                label_names = self.inference_data.attrs.get("label_names")
+                assert (label_names is not None) and (len(label_names) == Y.shape[1])
                 vars["Y"] = (("N", "Q"), Y)
-                coords["Q"] = 1+np.arange(Y.shape[1])
+                coords["Q"] = label_names
 
             self.inference_data.add_groups(
                 {
@@ -227,11 +243,29 @@ class _BaseModel:
         self._check_status(res)
         return res
 
-    def sample(self, X, Y, additional_args: str = "", background = False):
+    def sample(self, X, Y,
+               label_names: Optional[List] = None,
+               additional_args: str = "",
+               background=False):
+
         # validate input data
-        assert len(X) == len(Y)
-        X = np.array(X, copy=True)
-        Y = np.array(Y, copy=True)
+        assert len(X) == len(Y), (
+            f"Mismatch in number of samples: X has {len(X)} rows but Y has {len(Y)} rows. "
+            "Ensure that the feature matrix X and target array Y have the same number of rows."
+        )
+
+        X = np.array(X, copy=True) # force numpy array and
+        Y = np.array(Y, copy=True) # copy to avoid bugs if X or Y is a view
+
+        if label_names is not None:
+            assert len(label_names) == Y.shape[1], (
+                f"Mismatch in label dimensions: Y has {Y.shape[1]} columns (labels) but "
+                f"{len(label_names)} label names were provided. "
+                "Each column in Y should have a corresponding label name."
+            )
+        else:
+            label_names = 1+np.arange(Y.shape[1])
+
         data = dict(X=X, Y=Y, override_args=additional_args)
 
         # submit training job and make a job object
@@ -244,12 +278,13 @@ class _BaseModel:
 
         # wait for results: unpack into arviz dataset
         inference_data = job.getTrace()
+        inference_data = inference_data.assign_coords({"Q": label_names})
         inference_data.attrs["model_type"] = self.model_type
-        _append_data(inference_data, X, Y)
-
+        inference_data.attrs["label_names"] = list(label_names)
         self.inference_data = inference_data
 
-        # sample the posterior predictive
+        # add constant data along with the posterior predictive
+        _append_data(self.inference_data, X, Y)
         self.inference_data.add_groups(
             posterior_predictive=self.sample_posterior_predictive(X))
 
