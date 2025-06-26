@@ -7,7 +7,7 @@ import arviz as az
 import requests
 import os
 import tempfile
-from typing import Dict, Optional, Union, Callable
+from typing import Dict, Optional, Union, Callable, List
 from requests.models import Response
 
 from pathlib import Path
@@ -39,19 +39,32 @@ class RegressionResult(Job):
 
         return inference_data
 
-def _append_data(inference_data: az.InferenceData, X: np.ndarray, Y: np.ndarray) -> None:
+def _append_data(
+        inference_data: az.InferenceData,
+        X: np.ndarray,
+        Y: np.ndarray,
+) -> None:
     """Add training data (constant & observed) to an ArviZ InferenceData object.
     This modifies `inference_data` in-place and returns None.
     """
+
+    # NB this function is only called by `sample`.  X and Y are already validated.
+
+    label_names = inference_data.attrs.get("label_names")
+    assert (label_names is not None) and (len(label_names) == Y.shape[1])
+
+    feature_names = inference_data.attrs.get("feature_names")
+    assert (feature_names is not None) and (len(feature_names) == X.shape[1])
+
     inference_data.add_groups(
         {
             'constant_data': xr.Dataset(
                 data_vars={
-                    "X":  (("N", "D"), X),
+                    "X":  (("N", "dim"), X),
                 },
                 coords={
                     "N": 1+np.arange(X.shape[0]),
-                    "D": 1+np.arange(X.shape[1]),
+                    "dim": feature_names,
                 }),
             'observed_data': xr.Dataset(
                 data_vars={
@@ -59,7 +72,7 @@ def _append_data(inference_data: az.InferenceData, X: np.ndarray, Y: np.ndarray)
                 },
                 coords={
                     "N": 1+np.arange(Y.shape[0]),
-                    "Q": 1+np.arange(Y.shape[1]),
+                    "Q": label_names,
                 })
         })
 
@@ -73,7 +86,7 @@ def _predict_regression(
 
     Parameters:
         dataset (az.InferenceData): InferenceData containing posterior `eta` and `b`.
-        X (np.ndarray): Input features, shape (N, D).
+        X (np.ndarray): Input features, shape (N, dim).
         link (callable): Link function applied to linear predictor (e.g. expit, identity).
 
     Returns:
@@ -96,6 +109,9 @@ def _predict_regression(
 
     preds = link(theta)                                   # sample=n chain=c draw=d Q=q
 
+    label_names = dataset.attrs.get("label_names")
+    assert (label_names is not None) and (len(label_names) == preds.shape[3])
+
     # assemble predictions into a dataset with named coordinates
     ds = xr.Dataset(
         data_vars={"Yp": (("N", "chain", "draw", "Q"), preds)},
@@ -103,7 +119,7 @@ def _predict_regression(
             "N":     1+np.arange(preds.shape[0]),
             "chain": 1+np.arange(preds.shape[1]),
             "draw":  1+np.arange(preds.shape[2]),
-            "Q":     1+np.arange(preds.shape[3])}
+            "Q":     label_names}
     )
 
     # re-order coordinates to match arviz convention and return
@@ -119,7 +135,7 @@ def predict_logistic(dataset: az.InferenceData, X: np.ndarray) -> xr.Dataset:
 
     Parameters:
         dataset (az.InferenceData): Fitted model containing posterior samples of `eta` and `b`.
-        X (np.ndarray): New input data of shape (N, D), where D matches the number of features.
+        X (np.ndarray): New input data of shape (N, dim), where dim matches the number of features.
 
     Returns:
         xr.Dataset: A dataset with one variable `Yp` representing posterior predictive
@@ -137,7 +153,7 @@ def predict_linear(dataset: az.InferenceData, X: np.ndarray) -> xr.Dataset:
 
     Parameters:
         dataset (az.InferenceData): Fitted model containing posterior samples of `eta` and `b`.
-        X (np.ndarray): New input data of shape (N, D), where D matches the number of features.
+        X (np.ndarray): New input data of shape (N, dim), where dim matches the number of features.
 
     Returns:
         xr.Dataset: A dataset with one variable `Yp` representing posterior predictive
@@ -164,7 +180,7 @@ class _BaseModel:
         Compute the posterior mean prediction for new input data X.
 
         Parameters:
-            X (np.ndarray): New input features, shape (N, D).
+            X (np.ndarray): New input features, shape (N, dim).
             save (bool): If True, adds prediction results to self.inference_data under
                          'predictions' and 'predictions_constant_data'.
 
@@ -175,15 +191,22 @@ class _BaseModel:
         ps = self.sample_posterior_predictive(X)
 
         if save:
-            vars = {"X":  (("N", "D"), X)}
+            X = np.array(X)  # cast to np array; don't need to copy here
+
+            feature_names = self.inference_data.attrs.get("feature_names")
+            assert (feature_names is not None) and (len(feature_names) == X.shape[1])
+
+            vars = {"X":  (("N", "dim"), X)}
 
             coords = {"N": 1+np.arange(X.shape[0]),
-                      "D": 1+np.arange(X.shape[1])}
+                      "dim": feature_names}
 
             if Y is not None:
-                assert(Y.shape[0] == X.shape[0])
+                assert Y.shape[0] == X.shape[0]
+                label_names = self.inference_data.attrs.get("label_names")
+                assert (label_names is not None) and (len(label_names) == Y.shape[1])
                 vars["Y"] = (("N", "Q"), Y)
-                coords["Q"] = 1+np.arange(Y.shape[1])
+                coords["Q"] = label_names
 
             self.inference_data.add_groups(
                 {
@@ -227,11 +250,39 @@ class _BaseModel:
         self._check_status(res)
         return res
 
-    def sample(self, X, Y, additional_args: str = "", background = False):
+    def sample(self, X, Y,
+               label_names: Optional[List] = None,
+               feature_names: Optional[List] = None,
+               additional_args: str = "",
+               background=False):
+
         # validate input data
-        assert len(X) == len(Y)
-        X = np.array(X, copy=True)
-        Y = np.array(Y, copy=True)
+        assert len(X) == len(Y), (
+            f"Mismatch in number of samples: X has {len(X)} rows but Y has {len(Y)} rows. "
+            "Ensure that the feature matrix X and target array Y have the same number of rows."
+        )
+
+        X = np.array(X, copy=True) # force numpy array and
+        Y = np.array(Y, copy=True) # copy to avoid bugs if X or Y is a view
+
+        if label_names is not None:
+            assert len(label_names) == Y.shape[1], (
+                f"Mismatch in label dimensions: Y has {Y.shape[1]} columns (labels) but "
+                f"{len(label_names)} label names were provided. "
+                "Each column in Y should have a corresponding label name."
+            )
+        else:
+            label_names = 1+np.arange(Y.shape[1])
+
+        if feature_names is not None:
+            assert len(feature_names) == X.shape[1], (
+                f"Mismatch in feature dimensions: X has {X.shape[1]} columns (features) but "
+                f"{len(feature_names)} feature names were provided. "
+                "Each column in X should have a corresponding feature name."
+            )
+        else:
+            feature_names = 1+np.arange(X.shape[1])
+
         data = dict(X=X, Y=Y, override_args=additional_args)
 
         # submit training job and make a job object
@@ -244,12 +295,14 @@ class _BaseModel:
 
         # wait for results: unpack into arviz dataset
         inference_data = job.getTrace()
+        inference_data = inference_data.assign_coords({"Q": label_names, "dim": feature_names})
         inference_data.attrs["model_type"] = self.model_type
-        _append_data(inference_data, X, Y)
-
+        inference_data.attrs["label_names"] = list(label_names)
+        inference_data.attrs["feature_names"] = list(feature_names)
         self.inference_data = inference_data
 
-        # sample the posterior predictive
+        # add constant data along with the posterior predictive
+        _append_data(self.inference_data, X, Y)
         self.inference_data.add_groups(
             posterior_predictive=self.sample_posterior_predictive(X))
 
