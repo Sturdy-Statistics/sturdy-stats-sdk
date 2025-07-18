@@ -309,13 +309,16 @@ class Index:
             "academic_search", 
             "hackernews_comments", 
             "hackernews_story", 
-            "earnings_calls", 
+            "earnings_calls",
             "author_cn", 
             "news_date_split", 
             "google", 
             "google_news", 
             "reddit", 
             "cn_all"
+            "apple_app_store_reviews", 
+            "walmart_product_reviews",
+            "home_depot_product_reviews",
         ],
         query: str,
         start_date: str | None = None, 
@@ -324,7 +327,13 @@ class Index:
         commit: bool = True,
         wait: bool = True,
     ) -> Job | dict:
-        assert engine in ["earnings_calls", "hackernews_comments", "hackernews_story", "academic_search", "author_cn", "news_date_split", "google", "google_news", "reddit", "cn_all"] 
+        assert engine in [
+                "earnings_calls", "hackernews_comments", "hackernews_story", 
+                "academic_search", "author_cn", "news_date_split", 
+                "google", "google_news", "reddit", "cn_all",
+                "apple_app_store_reviews", "walmart_product_reviews",
+                "home_depot_product_reviews",
+                          ] 
         params = dict(q=query, engine=engine, commit=commit) 
         if start_date is not None: params["start_date"] = start_date
         if end_date is not None: params["end_date"] = end_date 
