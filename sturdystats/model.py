@@ -22,6 +22,27 @@ _base_url = "https://api.sturdystatistics.com/api/v1/numeric"
 
 class RegressionResult(Job):
     """subclass of Job which fetches InferenceData for regression models"""
+
+    def __init__(self, API_key: str, 
+                 job_id: str, poll_seconds: int = 1, 
+                 msgpack: bool = True,
+                 _base_url: str= "https://api.sturdystatistics.com/api/v1/job",
+                 label_names: List,
+                 feature_names: List,
+                 X: np.ndarray,
+                 Y: np.ndarray):
+        super().__init__(API_key=API_key,
+                         job_id=job_id,
+                         poll_seconds=poll_seconds,
+                         msgpack=msgpack,
+                         _base_url=_base_url)
+        self.label_names = label_names
+        self.feature_names = feature_names
+        self.X = X
+        self.Y = Y
+
+        
+
     def getTrace(self):
         """
         Wait for job completion and return the resulting InferenceData.
@@ -287,7 +308,8 @@ class _BaseModel:
 
         # submit training job and make a job object
         job_id = self._post(f"/{self.model_type}", data).json()["job_id"]
-        job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url())
+        job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url(),
+                               label_names = label_names, feature_names = feature_names, X = X, Y = Y)
 
         # run in background: return job object
         if background:
