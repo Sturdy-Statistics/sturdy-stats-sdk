@@ -27,10 +27,11 @@ class RegressionResult(Job):
                  job_id: str, poll_seconds: int = 1, 
                  msgpack: bool = True,
                  _base_url: str= "https://api.sturdystatistics.com/api/v1/job",
-                 label_names: List,
-                 feature_names: List,
+                 label_names: Optional[List] = None,
+                 feature_names: Optional[List] = None,
                  X: np.ndarray,
-                 Y: np.ndarray):
+                 Y: np.ndarray,
+                 sample_posterior_predictive = xr.Dataset):
         super().__init__(API_key=API_key,
                          job_id=job_id,
                          poll_seconds=poll_seconds,
@@ -40,7 +41,7 @@ class RegressionResult(Job):
         self.feature_names = feature_names
         self.X = X
         self.Y = Y
-
+        self.sample_posterior_predictive = sample_posterior_predictive
         
 
     def getTrace(self):
@@ -49,7 +50,7 @@ class RegressionResult(Job):
         Assumes job returns a NetCDF binary in 'result'.
         """
         bdata: bytes = self.wait()["result"] #type: ignore
-
+        
         with tempfile.TemporaryDirectory() as tempdir:
             path = Path(tempdir) / "trace.nc"
             path.write_bytes(bdata)
@@ -58,6 +59,18 @@ class RegressionResult(Job):
             with az.rc_context(rc={"data.load": "eager"}):
                 inference_data = az.from_netcdf(path)
 
+
+        inference_data = inference_data.assign_coords({"Q": self.label_names, "dim": self.feature_names})
+        inference_data.attrs["model_type"] = self.model_type
+        inference_data.attrs["label_names"] = list(self.label_names)
+        inference_data.attrs["feature_names"] = list(self.feature_names)
+
+        # add constant data along with the posterior predictive
+        _append_data(inference_data, self.X, self.Y)
+        inference_data.add_groups(
+            posterior_predictive=self.sample_posterior_predictive)
+
+                
         return inference_data
 
 def _append_data(
@@ -308,8 +321,9 @@ class _BaseModel:
 
         # submit training job and make a job object
         job_id = self._post(f"/{self.model_type}", data).json()["job_id"]
+        sample_posterior_predictive = self.sample_posterior_predictive(X)
         job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url(),
-                               label_names = label_names, feature_names = feature_names, X = X, Y = Y)
+                               label_names = label_names, feature_names = feature_names, X = X, Y = Y, sample_posterior_predictive = sample_posterior_predictive)
 
         # run in background: return job object
         if background:
@@ -326,7 +340,7 @@ class _BaseModel:
         # add constant data along with the posterior predictive
         _append_data(self.inference_data, X, Y)
         self.inference_data.add_groups(
-            posterior_predictive=self.sample_posterior_predictive(X))
+            posterior_predictive=sample_posterior_predictive)
 
         return self
 
