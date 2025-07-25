@@ -27,7 +27,7 @@ class RegressionResult(Job):
                  job_id: str,
                  X: np.ndarray,
                  Y: np.ndarray,
-                 model_type: str
+                 model_type: str,
                  poll_seconds: int = 1,
                  msgpack: bool = True,
                  _base_url: str = "https://api.sturdystatistics.com/api/v1/job",
