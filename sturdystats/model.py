@@ -27,6 +27,7 @@ class RegressionResult(Job):
                  job_id: str,
                  X: np.ndarray,
                  Y: np.ndarray,
+                 model_type: str
                  poll_seconds: int = 1,
                  msgpack: bool = True,
                  _base_url: str = "https://api.sturdystatistics.com/api/v1/job",
@@ -41,6 +42,7 @@ class RegressionResult(Job):
         self.feature_names = feature_names
         self.X = X
         self.Y = Y
+        self.model_type = model_type
         
 
     def getTrace(self):
@@ -319,7 +321,7 @@ class _BaseModel:
         # submit training job and make a job object
         job_id = self._post(f"/{self.model_type}", data).json()["job_id"]
         job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url(),
-                               label_names = label_names, feature_names = feature_names, X = X, Y = Y)
+                               label_names = label_names, feature_names = feature_names, X = X, Y = Y, model_type = self.model_type)
 
         # run in background: return job object
         if background:
@@ -327,10 +329,6 @@ class _BaseModel:
 
         # wait for results: unpack into arviz dataset
         inference_data = job.getTrace()
-        inference_data = inference_data.assign_coords({"Q": label_names, "dim": feature_names})
-        inference_data.attrs["model_type"] = self.model_type
-        inference_data.attrs["label_names"] = list(label_names)
-        inference_data.attrs["feature_names"] = list(feature_names)
         self.inference_data = inference_data
 
         # add constant data along with the posterior predictive
