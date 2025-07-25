@@ -318,7 +318,6 @@ class _BaseModel:
 
         # submit training job and make a job object
         job_id = self._post(f"/{self.model_type}", data).json()["job_id"]
-        sample_posterior_predictive = self.sample_posterior_predictive(X)
         job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url(),
                                label_names = label_names, feature_names = feature_names, X = X, Y = Y)
 
