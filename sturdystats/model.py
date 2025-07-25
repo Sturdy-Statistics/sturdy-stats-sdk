@@ -332,7 +332,6 @@ class _BaseModel:
         self.inference_data = inference_data
 
         # add constant data along with the posterior predictive
-        _append_data(self.inference_data, X, Y)
         self.inference_data.add_groups(
             posterior_predictive=sample_posterior_predictive)
 
