@@ -31,8 +31,7 @@ class RegressionResult(Job):
                  msgpack: bool = True,
                  _base_url: str = "https://api.sturdystatistics.com/api/v1/job",
                  label_names: Optional[List] = None,
-                 feature_names: Optional[List] = None,
-                 sample_posterior_predictive = xr.Dataset):
+                 feature_names: Optional[List] = None):
         super().__init__(API_key=API_key,
                          job_id=job_id,
                          poll_seconds=poll_seconds,
@@ -42,7 +41,6 @@ class RegressionResult(Job):
         self.feature_names = feature_names
         self.X = X
         self.Y = Y
-        self.sample_posterior_predictive = sample_posterior_predictive
         
 
     def getTrace(self):
@@ -68,8 +66,6 @@ class RegressionResult(Job):
 
         # add constant data along with the posterior predictive
         _append_data(inference_data, self.X, self.Y)
-        inference_data.add_groups(
-            posterior_predictive=self.sample_posterior_predictive)
 
                 
         return inference_data
@@ -324,7 +320,7 @@ class _BaseModel:
         job_id = self._post(f"/{self.model_type}", data).json()["job_id"]
         sample_posterior_predictive = self.sample_posterior_predictive(X)
         job = RegressionResult(API_key=self.API_key, msgpack=True, job_id=job_id, _base_url=self._job_base_url(),
-                               label_names = label_names, feature_names = feature_names, X = X, Y = Y, sample_posterior_predictive = sample_posterior_predictive)
+                               label_names = label_names, feature_names = feature_names, X = X, Y = Y)
 
         # run in background: return job object
         if background:
