@@ -333,7 +333,7 @@ class _BaseModel:
 
         # add constant data along with the posterior predictive
         self.inference_data.add_groups(
-            posterior_predictive=sample_posterior_predictive)
+            posterior_predictive=self.sample_posterior_predictive(X))
 
         return self
 
