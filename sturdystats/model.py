@@ -23,15 +23,16 @@ _base_url = "https://api.sturdystatistics.com/api/v1/numeric"
 class RegressionResult(Job):
     """subclass of Job which fetches InferenceData for regression models"""
 
-    def __init__(self, API_key: str, 
-                 job_id: str, poll_seconds: int = 1, 
+    def __init__(self, API_key: str,
+                 job_id: str,
+                 X: np.ndarray,
+                 Y: np.ndarray,
+                 poll_seconds: int = 1,
                  msgpack: bool = True,
-                 _base_url: str= "https://api.sturdystatistics.com/api/v1/job",
+                 _base_url: str = "https://api.sturdystatistics.com/api/v1/job",
                  label_names: Optional[List] = None,
                  feature_names: Optional[List] = None,
-                 sample_posterior_predictive = xr.Dataset,
-                 X: np.ndarray,
-                 Y: np.ndarray):
+                 sample_posterior_predictive = xr.Dataset):
         super().__init__(API_key=API_key,
                          job_id=job_id,
                          poll_seconds=poll_seconds,
