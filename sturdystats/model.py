@@ -29,9 +29,9 @@ class RegressionResult(Job):
                  _base_url: str= "https://api.sturdystatistics.com/api/v1/job",
                  label_names: Optional[List] = None,
                  feature_names: Optional[List] = None,
+                 sample_posterior_predictive = xr.Dataset,
                  X: np.ndarray,
-                 Y: np.ndarray,
-                 sample_posterior_predictive = xr.Dataset):
+                 Y: np.ndarray):
         super().__init__(API_key=API_key,
                          job_id=job_id,
                          poll_seconds=poll_seconds,
