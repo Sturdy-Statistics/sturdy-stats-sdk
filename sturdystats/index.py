@@ -65,8 +65,10 @@ class Index:
 
     def _check_status(self, info: Response) -> None:
         if info.status_code != 200:
-            try: content = info.content.decode()
-            except: content = info.content
+            try: content = info.json()
+            except: 
+                try: content = info.content.decode() 
+                except: content = info.content
             raise requests.HTTPError(content)
 
     @retry(wait=wait_exponential(),
