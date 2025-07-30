@@ -214,6 +214,25 @@ class Index:
             return job
         return job.wait()
 
+    @overload
+    def updateIntegrationDocs(self, wait: Literal[True] = True) -> dict: ...
+    @overload
+    def updateIntegrationDocs(self, wait: Literal[False] = False) -> Job: ...
+    def updateIntegrationDocs(self, wait: bool = True) -> Job | dict:
+        """
+        """
+        self._print(f"""updating index "{self.id}"...""") 
+        # Load the latest data from all existing integrations applied to an index
+        #
+        # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/integration/update
+        info = self._post(f"/{self.id}/doc/integration/update", dict())
+        job_id = info.json()["job_id"]
+        job = Job(self.API_key, job_id, 1, _base_url=self._job_base_url())
+        if not wait:
+            return job
+        return job.wait()
+
+
 
     def _upload_batch(self, records: Iterable[Dict], save = "true"):
         if len(records) > 1000:
