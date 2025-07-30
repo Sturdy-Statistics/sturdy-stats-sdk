@@ -319,7 +319,7 @@ class Index:
             "google", 
             "google_news", 
             "reddit", 
-            "cn_all"
+            "cn_all",
             "apple_app_store_reviews", 
             "walmart_product_reviews",
             "home_depot_product_reviews",
