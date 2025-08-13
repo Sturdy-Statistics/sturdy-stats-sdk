@@ -35,23 +35,20 @@ class Index:
         self.API_key = API_key or ""
         self.base_url = _base_url or "https://api.sturdystatistics.com/api/v1/text/index"
 
-        self.name = name
-        self.id = id
-        self.verbose = verbose
-
-        if (self.name is None) and (self.id is None):
+        if (name is None) and (id is None):
             raise ValueError("Must provide either an index_name or an index_id.")
-        if (self.name is not None) and (self.id is not None):
+        if (name is not None) and (id is not None):
             raise ValueError("Cannot provide both an index_name and an index_id.")
 
-        status = self._get_status(index_name=self.name, index_id = self.id)
-        if status is None:
-            self.id = self._create(self.name)
-            self._print(f"""Created new index with id="{self.id}".""")
-        else:
-            self.name = status["name"]
-            self.id = status["id"]
-            self._print(f"""Found an existing index with id="{self.id}".""")
+
+        if id is not None: info = self._get_status(id)
+        elif name is not None: info = self._create(name)
+        else: raise ValueError("Must provide an index_name XOR an index_id")
+
+        self.id = info["id"]
+        self.name = info["name"]
+
+        self.verbose = verbose
         self.pandata = None
 
 
@@ -71,8 +68,6 @@ class Index:
                 except: content = info.content
             raise requests.HTTPError(content)
 
-    @retry(wait=wait_exponential(),
-           stop=(stop_after_attempt(2)))
     def _post(self, url: str, params: Dict) -> Response:
         if self.API_key is None:
             raise ValueError("All POST requests (index creation, data upload, model training) require an API Key. Visit https://sturdystatistics.com/docs/web/api-key-creation.html to create your free API key today.")
@@ -110,65 +105,23 @@ class Index:
         #    }'
 
         info = self._post("", dict(name=index_name))
-        index_id = info.json()["id"]
-        return index_id
-
-
-
-    def _get_status_by_name(self, index_name: str):
-
-        # List all indices associated with this API key.  Equivalent to:
-        #
-        # curl -X GET 'https://sturdystatistics.com/api/text/v1/index?api_key=API_KEY'
-        #
-        # https://sturdystatistics.com/api/documentation#tag/apitextv1/operation/listIndicies
-
-        info = self._get("", dict())
-
-        # find matches by name
-        matches = [ i for i in info.json() if i["name"] == index_name ]
-        if (0 == len(matches)):
-            return None
-        assert(1 == len(matches))
-        return matches[0]
-
-
-
-    def _get_status_by_id(self, index_id: str):
-
-        # curl -X GET 'https://sturdystatistics.com/api/text/v1/index/{index_id}?api_key=API_KEY'
-
-        info = self._get(f"/{index_id}", dict())
-        status = info.json()
-        return status
-
-
+        index_info = info.json()
+        return index_info 
 
     def _get_status(self,
-                   index_name: Optional[str] = None,
-                   index_id: Optional[str] = None):
+                   index_id: str
+                    ) -> dict:
+        info = self._get(f"/{index_id}", dict())
+        return info.json()
+
+    def get_status(self,) -> dict:
         """Look up an index by name or ID and return all metadata
     associated with the index.
 
     https://sturdystatistics.com/api/documentation#tag/apitextv1/operation/getSingleIndexInfo
 
     """
-
-        if (index_name is None) and (index_id is None):
-            raise ValueError("Must provide either an index_name or an index_id.")
-        if (index_name is not None) and (index_id is not None):
-            raise ValueError("Cannot provide both an index_name and an index_id.")
-        if index_id is not None:
-            # look up by index_id:
-            return self._get_status_by_id(index_id)
-        # look up by name:
-        return self._get_status_by_name(index_name)
-
-    def get_status(self) -> dict:
-        if self.id is not None:
-            return self._get_status(index_id=self.id)
-        else:
-            return self._get_status(index_name=self.name)
+        return self._get_status(self.id) 
 
     @overload
     def commit(self, wait: Literal[True] = True) -> dict: ...
@@ -295,7 +248,7 @@ class Index:
         docIsNull = False
         for i, doc in enumerate(records):
             if not docIsNull and len( (doc.get("doc", "") or "").strip()) == 0:
-                print(" Warning: field `doc` is empty. Empty documents are allowed but only data stored under the field `doc` will have its content indexed")
+                self._print(" Warning: field `doc` is empty. Empty documents are allowed but only data stored under the field `doc` will have its content indexed")
                 docIsNull = True
 
             docsize = len(json.dumps(doc).encode("utf-8"))
