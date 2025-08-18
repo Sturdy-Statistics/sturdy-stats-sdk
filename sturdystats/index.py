@@ -527,9 +527,13 @@ class Index:
     ) -> dict:
         params = dict(field=field)
         params = {**params, **override_args}
-        if self.pandata is None and field is None:
-            self.pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", params).content)
-        return self.pandata # type: ignore
+        if self.pandata is None:
+            pandata = srsly.msgpack_loads(self._get(f"/{self.id}/pandata", params).content)
+            if field is None:
+                self.pandata = pandata
+        else:
+            pandata = self.pandata
+        return pandata # type: ignore
 
     def queryMeta(
             self,
