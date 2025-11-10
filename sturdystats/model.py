@@ -291,6 +291,7 @@ class _BaseModel:
 
         # run in background: return job object
         if background:
+            preprocessing(self, X, Y, label_names, feature_names, job)
             return job
 
         # wait for results: unpack into arviz dataset
