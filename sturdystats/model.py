@@ -250,6 +250,57 @@ class _BaseModel:
         self._check_status(res)
         return res
 
+    def preprocess(self, X, Y,
+                  label_names,
+                  feature_names, job):
+        #make empty inference data obj
+        inference_data = az.InferenceData(posterior = {})
+        
+        #store all preprocessing info
+        inference_data = inference_data.assign_coords({"Q": label_names, "dim": feature_names})
+        inference_data.attrs["model_type"] = model.model_type
+        inference_data.attrs["label_names"] = list(label_names)
+        inference_data.attrs["feature_names"] = list(feature_names)
+        inference_data.attrs["job"] = job
+        inference_data.attrs["X"] = X
+        inference_data.attrs["Y"] = Y
+        inference_data.attrs["processed"] = "PREPROCESSED"
+    
+        self.inference_data = inference_data
+
+        return self
+
+
+    def postprocess(self):
+
+        preprocessed_data = self.inference_data
+        if preprocessed_data is None or preprocessed_data.attrs["processed"] is None or preprocessed_data["processed"] != "PREPROCESSED":
+            raise ValueError("Model must be preprocessed before it can be postprocessed")
+
+        job = preprocessed_data.attrs["job"]
+        status = job.get_status()
+
+        if status["status"] not in ["SUCCEEDED"]:
+            raise ValueError("Job status is ", status["status"])
+
+        trace = job.getTrace()
+    
+        X = preprocessed_data.attrs["X"]
+        Y = preprocessed_data.attrs["Y"]
+        
+        trace.assign_coords({"Q": preprocessed_data.attrs["label_names"], "dim": preprocessed_data.attrs["feature_names"]})
+        trace.attrs["model_type"] = preprocessed_data.attrs["model_type"]
+        trace.attrs["label_names"] = preprocessed_data.attrs["label_names"]
+        trace.attrs["feature_names"] = preprocessed_data.attrs["feature_names"]
+        
+        self.inference_data = trace
+    
+        _append_data(self.inference_data, X, Y)
+        self.inference_data.add_groups(
+            posterior_predictive=self.sample_posterior_predictive(X))
+
+        return self
+    
     def sample(self, X, Y,
                label_names: Optional[List] = None,
                feature_names: Optional[List] = None,
@@ -291,7 +342,6 @@ class _BaseModel:
 
         # run in background: return job object
         if background:
-            preprocessing(self, X, Y, label_names, feature_names, job)
             return job
 
         # wait for results: unpack into arviz dataset
