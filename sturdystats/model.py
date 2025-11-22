@@ -252,7 +252,7 @@ class _BaseModel:
 
     def preprocess(self, X, Y,
                   label_names,
-                  feature_names, job):
+                  feature_names):
         #make empty inference data obj
         inference_data = az.InferenceData(posterior = {})
         
@@ -261,7 +261,6 @@ class _BaseModel:
         inference_data.attrs["model_type"] = model.model_type
         inference_data.attrs["label_names"] = list(label_names)
         inference_data.attrs["feature_names"] = list(feature_names)
-        inference_data.attrs["job"] = job
         inference_data.attrs["X"] = X
         inference_data.attrs["Y"] = Y
         inference_data.attrs["processed"] = "PREPROCESSED"
@@ -271,13 +270,12 @@ class _BaseModel:
         return self
 
 
-    def postprocess(self):
+    def postprocess(self, job):
 
         preprocessed_data = self.inference_data
         if preprocessed_data is None or preprocessed_data.attrs["processed"] is None or preprocessed_data["processed"] != "PREPROCESSED":
             raise ValueError("Model must be preprocessed before it can be postprocessed")
 
-        job = preprocessed_data.attrs["job"]
         status = job.get_status()
 
         if status["status"] not in ["SUCCEEDED"]:
