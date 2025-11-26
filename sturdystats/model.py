@@ -254,7 +254,8 @@ class _BaseModel:
                   label_names,
                   feature_names):
         #make empty inference data obj
-        inference_data = az.InferenceData(posterior = {})
+        empty_dataset = xr.Dataset()
+        inference_data = az.InferenceData(posterior = empty_dataset)
         
         #store all preprocessing info
         inference_data = inference_data.assign_coords({"Q": label_names, "dim": feature_names})
