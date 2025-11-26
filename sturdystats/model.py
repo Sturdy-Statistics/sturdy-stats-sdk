@@ -274,7 +274,8 @@ class _BaseModel:
     def postprocess(self, job):
 
         preprocessed_data = self.inference_data
-        if preprocessed_data is None or preprocessed_data.attrs["processed"] is None or preprocessed_data["processed"] != "PREPROCESSED":
+        process_status = preprocessed_data["processed"]
+        if preprocessed_data is None or process_status is None or process_status != "PREPROCESSED":
             raise ValueError("Model must be preprocessed before it can be postprocessed")
 
         status = job.get_status()
