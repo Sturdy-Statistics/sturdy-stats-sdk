@@ -259,7 +259,7 @@ class _BaseModel:
         
         #store all preprocessing info
         inference_data = inference_data.assign_coords({"Q": label_names, "dim": feature_names})
-        inference_data.attrs["model_type"] = model.model_type
+        inference_data.attrs["model_type"] = self.model_type
         inference_data.attrs["label_names"] = list(label_names)
         inference_data.attrs["feature_names"] = list(feature_names)
         inference_data.attrs["X"] = X
