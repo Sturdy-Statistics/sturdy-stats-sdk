@@ -286,7 +286,7 @@ class _BaseModel:
         X = preprocessed_data.attrs["X"]
         Y = preprocessed_data.attrs["Y"]
         
-        trace.assign_coords({"Q": preprocessed_data.attrs["label_names"], "dim": preprocessed_data.attrs["feature_names"]})
+        trace = trace.assign_coords({"Q": preprocessed_data.attrs["label_names"], "dim": preprocessed_data.attrs["feature_names"]})
         trace.attrs["model_type"] = preprocessed_data.attrs["model_type"]
         trace.attrs["label_names"] = preprocessed_data.attrs["label_names"]
         trace.attrs["feature_names"] = preprocessed_data.attrs["feature_names"]
