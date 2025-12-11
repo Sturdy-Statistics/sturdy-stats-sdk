@@ -277,8 +277,11 @@ class Index:
         assert len(doc_ids) > 0
         params = dict()
         params = {**params, **override_args}
-        joined = ",".join(doc_ids)
-        return self._post(f"/{self.id}/doc/delete/{joined}", params).json()
+        res = dict(result="success", docs_deleted=0)
+        for batch in chunked(doc_ids, 50):
+            joined = ",".join(doc_ids)
+            res["docs_deleted"] += self._post(f"/{self.id}/doc/delete/{joined}", params).json()["docs_deleted"]
+        return res
 
     def ingestIntegration(self,
         engine: Literal[
@@ -324,11 +327,25 @@ class Index:
 
 
 
-    @overload
-    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: Literal[True] = True) -> dict: ...
-    @overload
-    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: Literal[False] = False) -> Job: ...
-    def train(self, params: Dict = dict(), fast: bool = False, force: bool = False, wait: bool = True) -> Job | dict:
+    def train(self, 
+              params: Dict = dict(), 
+              K: int = 192, 
+              burn_in: int = 2000, 
+              subdoc_hierarchy: bool = True,
+              regex_paragraph_splitter: str = "\n",
+              max_paragraph_length: int = 250,
+              doc_hierarchy: list[str] = [],
+              label_field_names: list[str] = [], 
+              tag_field_names: list[str] = [], 
+              min_label_count: int = 3,
+              min_gpt_topic_excerpts: int = 2,
+              remove_stop_words: bool = True,
+              V: int = 10000,
+              model_args: str = "",
+              fast: bool = False, 
+              force: bool = False, 
+              wait: bool = True
+    ) -> Job | dict:
         """Trains an AI model on all documents in the production
     index. Once an index has been trained, documents are queryable,
     and the model automatically processes subsequently uploaded
@@ -362,11 +379,24 @@ class Index:
             self._print(f"index {self.name} is already trained.")
             return status
 
-        job_params = {**params}
+        job_params = dict(
+            K=K,
+            burn_in=burn_in,
+            subdoc_hierarchy=subdoc_hierarchy,
+            regex_paragraph_splitter=regex_paragraph_splitter,
+            max_paragraph_length=max_paragraph_length,
+            doc_hierarchy=doc_hierarchy,
+            label_field_names=label_field_names,
+            tag_field_names=tag_field_names,
+            min_label_count=min_label_count,
+            min_gpt_topic_excerpts=min_gpt_topic_excerpts,
+            remove_stop_words=remove_stop_words,
+            V=V,
+            model_args=model_args,
+        )
+        job_params = {**job_params, **params}
         poll = 5
         if fast:
-            job_params["K"] = job_params.get("K", 48)
-            job_params["burn_in"] = job_params.get("burn_in", 1000)
             job_params["model_args"] = " MCMC/sample_a_start=100000 " + job_params.get("model_args", "")
             job_params["fast"] = True
             poll = 1
@@ -376,7 +406,6 @@ class Index:
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/train \
         #   -H "Content-Type: application/json" \
         #   -d '{
-        #      "api_key": "API_KEY",
         #      PARAMS
         #    }'
 
@@ -485,9 +514,11 @@ class Index:
         context: int = 0,
         override_args: dict = dict(),
         return_df: bool = True,
+        offset: int = 0,
+        limit: int = 20,
     ) -> pd.DataFrame:
         assert len(doc_ids) > 0
-        params = dict(context=context, max_excerpts_per_doc=max_excerpts_per_doc)
+        params = dict(context=context, max_excerpts_per_doc=max_excerpts_per_doc, offset=offset, limit=limit)
         if search_query is not None:
             params["query"] = search_query
         if topic_id is not None:
@@ -594,6 +625,7 @@ class Index:
         semantic_search_weight: float = .3,
         semantic_search_cutoff: float = .2,
         override_args: dict = dict(),
+        supervised_by: str = "", 
         return_df: bool = True
     ) -> pd.DataFrame:
         params = dict(
@@ -602,6 +634,7 @@ class Index:
             limit=limit,
             semantic_search_weight=semantic_search_weight,
             semantic_search_cutoff=semantic_search_cutoff,
+            supervised_by=supervised_by,
         )
         params = {**params, **override_args}
         res = self._get(f"/{self.id}/topic/search", params).json()["topics"]
