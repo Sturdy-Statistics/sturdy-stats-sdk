@@ -12,7 +12,7 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential
-) 
+)
 import pandas as pd
 
 
@@ -33,7 +33,7 @@ class Index:
     ):
 
         self.API_key = API_key or ""
-        self.base_url = _base_url or "https://api.sturdystatistics.com/api/v1/text/index"
+        self.base_url = _base_url or "https://legacy-api.sturdystatistics.com/api/v1/text/index"
 
         if (name is None) and (id is None):
             raise ValueError("Must provide either an index_name or an index_id.")
@@ -63,8 +63,8 @@ class Index:
     def _check_status(self, info: Response) -> None:
         if info.status_code != 200:
             try: content = info.json()
-            except: 
-                try: content = info.content.decode() 
+            except:
+                try: content = info.content.decode()
                 except: content = info.content
             raise requests.HTTPError(content)
 
@@ -106,7 +106,7 @@ class Index:
 
         info = self._post("", dict(name=index_name))
         index_info = info.json()
-        return index_info 
+        return index_info
 
     def _get_status(self,
                    index_id: str
@@ -121,7 +121,7 @@ class Index:
     https://sturdystatistics.com/api/documentation#tag/apitextv1/operation/getSingleIndexInfo
 
     """
-        return self._get_status(self.id) 
+        return self._get_status(self.id)
 
     @overload
     def commit(self, wait: Literal[True] = True) -> dict: ...
@@ -152,7 +152,7 @@ class Index:
     def unstage(self, wait: bool = True) -> Job | dict:
         """
         """
-        self._print(f"""unstaging changes to index "{self.id}"...""") 
+        self._print(f"""unstaging changes to index "{self.id}"...""")
         # Commit changes from the staging index to the permanent index.  Equivalent to:
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/commit \
@@ -174,7 +174,7 @@ class Index:
     def updateIntegrationDocs(self, wait: bool = True) -> Job | dict:
         """
         """
-        self._print(f"""updating index "{self.id}"...""") 
+        self._print(f"""updating index "{self.id}"...""")
         # Load the latest data from all existing integrations applied to an index
         #
         # curl -X POST https://sturdystatistics.com/api/text/v1/index/{index_id}/doc/integration/update
@@ -285,37 +285,37 @@ class Index:
 
     def ingestIntegration(self,
         engine: Literal[
-            "academic_search", 
-            "hackernews_comments", 
-            "hackernews_story", 
+            "academic_search",
+            "hackernews_comments",
+            "hackernews_story",
             "earnings_calls",
-            "author_cn", 
-            "news_date_split", 
-            "google", 
-            "google_news", 
-            "reddit", 
+            "author_cn",
+            "news_date_split",
+            "google",
+            "google_news",
+            "reddit",
             "cn_all",
-            "apple_app_store_reviews", 
+            "apple_app_store_reviews",
             "walmart_product_reviews",
             "home_depot_product_reviews",
         ],
         query: str,
-        start_date: str | None = None, 
+        start_date: str | None = None,
         end_date: str | None = None,
         args: dict = dict(),
         commit: bool = True,
         wait: bool = True,
     ) -> Job | dict:
         assert engine in [
-                "earnings_calls", "hackernews_comments", "hackernews_story", 
-                "academic_search", "author_cn", "news_date_split", 
+                "earnings_calls", "hackernews_comments", "hackernews_story",
+                "academic_search", "author_cn", "news_date_split",
                 "google", "google_news", "reddit", "cn_all",
                 "apple_app_store_reviews", "walmart_product_reviews",
                 "home_depot_product_reviews",
-                          ] 
-        params = dict(q=query, engine=engine, commit=commit) 
+                          ]
+        params = dict(q=query, engine=engine, commit=commit)
         if start_date is not None: params["start_date"] = start_date
-        if end_date is not None: params["end_date"] = end_date 
+        if end_date is not None: params["end_date"] = end_date
         params = params | args
         self._print("uploading data to index...")
         info = self._post(f"/{self.id}/doc/integration", params)
@@ -327,23 +327,23 @@ class Index:
 
 
 
-    def train(self, 
-              params: Dict = dict(), 
-              K: int = 192, 
-              burn_in: int = 2000, 
+    def train(self,
+              params: Dict = dict(),
+              K: int = 192,
+              burn_in: int = 2000,
               subdoc_hierarchy: bool = True,
               regex_paragraph_splitter: str = "\n",
               max_paragraph_length: int = 250,
               doc_hierarchy: list[str] = [],
-              label_field_names: list[str] = [], 
-              tag_field_names: list[str] = [], 
+              label_field_names: list[str] = [],
+              tag_field_names: list[str] = [],
               min_label_count: int = 3,
               min_gpt_topic_excerpts: int = 2,
               remove_stop_words: bool = True,
               V: int = 10000,
               model_args: str = "",
-              fast: bool = False, 
-              force: bool = False, 
+              fast: bool = False,
+              force: bool = False,
               wait: bool = True
     ) -> Job | dict:
         """Trains an AI model on all documents in the production
@@ -502,7 +502,7 @@ class Index:
         df = pd.DataFrame(res3)
         front = [ "doc_id", "text" ]
         return df[[ *front, *[c for c in df.columns if c not in front ]]]
-        
+
 
     def getDocs(
         self,
@@ -546,7 +546,7 @@ class Index:
         docbin = DocBin().from_bytes(self._get(f"/{self.id}/doc/binary/{joined}", dict()).content)
         pandata: dict = self.getPandata() # type: ignore
         for tok, name in zip([Token, Span, Doc], ["token", "span", "doc"]):
-            for ext in pandata.get(name+"_exts", []): 
+            for ext in pandata.get(name+"_exts", []):
                 if not tok.has_extension(ext["name"]): tok.set_extension(**ext)
         return docbin
 
@@ -568,7 +568,7 @@ class Index:
 
     def queryMeta(
             self,
-            query: str, 
+            query: str,
             search_query: str = "",
             semantic_search_weight: float = .3,
             semantic_search_cutoff: float = .2,
@@ -588,15 +588,15 @@ class Index:
             finalRes = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)["results"] # type: ignore
         else:
             while True:
-                params["q"] = query 
-                params["offset"] = len(finalRes) 
+                params["q"] = query
+                params["offset"] = len(finalRes)
                 res: list[dict] = srsly.msgpack_loads(self._get(f"/{self.id}/doc/meta", params).content)["results"] # type: ignore
                 if len(res) == 0: break
                 finalRes.extend(res)
 
         if not return_df: return finalRes
         return pd.DataFrame(finalRes)
-    
+
     def annotate(self):
         self._post(f"/{self.id}/annotate", dict())
         while True:
@@ -625,7 +625,7 @@ class Index:
         semantic_search_weight: float = .3,
         semantic_search_cutoff: float = .2,
         override_args: dict = dict(),
-        supervised_by: str = "", 
+        supervised_by: str = "",
         return_df: bool = True
     ) -> pd.DataFrame:
         params = dict(
