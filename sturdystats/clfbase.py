@@ -3,11 +3,13 @@ from .base import SturdyStatsBase
 
 
 class ClfBase(SturdyStatsBase):
+    """Classification is a two-stage process. First, pretrain a **clf-base** — a topic-aware base model trained over a committed dataset. Pretraining is computationally expensive and runs asynchronously. Once the clf-base is `ready`, train one or more **clf-models** on top of it: each clf-model learns to predict a set of label columns present in the training dataset. clf-models are designed for scalability and high-throughput inference, and require a minimum of 32 labeled examples per class. For few-shot or exploratory classification with less data, training a classifier via the index is more robust."""
 
     def list(self, transform = None):
         """
         List clf-bases
-        → GET /classifiers/bases
+        
+        Route: GET /classifiers/bases
         """
         _path = f"classifiers/bases"
         _resp = self._get(_path)
@@ -19,7 +21,12 @@ class ClfBase(SturdyStatsBase):
     def create(cls, dataset_id, model_name, org_id = None, api_key = None, base_url = None):
         """
         Pretrain a clf-base
-        → POST /classifiers/bases
+        
+        Route: POST /classifiers/bases
+        
+        Args:
+            dataset_id — ID of the committed dataset to pretrain on.
+            model_name — Human-readable name for this clf-base.
         """
         _path = f"classifiers/bases"
         _body = {k: v for k, v in {
@@ -34,7 +41,8 @@ class ClfBase(SturdyStatsBase):
     def status(self):
         """
         Get clf-base
-        → GET /classifiers/bases/{clf_base_id}
+        
+        Route: GET /classifiers/bases/{clf_base_id}
         """
         _path = f"classifiers/bases/{self.id}"
         return self._get(_path)

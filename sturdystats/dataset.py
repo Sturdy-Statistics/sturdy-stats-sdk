@@ -3,11 +3,13 @@ from .base import SturdyStatsBase
 
 
 class Dataset(SturdyStatsBase):
+    """Datasets are the interface between user data and the system. Upload data as parquet chunks for large datasets or individual rows for one-off appends — each record requires a `doc_id` (VARCHAR) and `doc` (VARCHAR) column; additional columns become queryable metadata. Once committed, a dataset is sealed into an immutable artifact that can be used to train a clf-base, clf-model, or index. Committed datasets cannot be modified."""
 
     def list(self, transform = None):
         """
         List datasets
-        → GET /datasets
+        
+        Route: GET /datasets
         """
         _path = f"datasets"
         _resp = self._get(_path)
@@ -19,7 +21,12 @@ class Dataset(SturdyStatsBase):
     def create(cls, name, metadata_json = None, org_id = None, api_key = None, base_url = None):
         """
         Create dataset
-        → POST /datasets
+        
+        Route: POST /datasets
+        
+        Args:
+            name — Human-readable name for this dataset.
+            metadata_json (default: None) — Optional JSON metadata to associate with the dataset. Stored as-is and returned on get/list.
         """
         _path = f"datasets"
         _body = {k: v for k, v in {
@@ -34,7 +41,8 @@ class Dataset(SturdyStatsBase):
     def status(self):
         """
         Get dataset
-        → GET /datasets/{dataset_id}
+        
+        Route: GET /datasets/{dataset_id}
         """
         _path = f"datasets/{self.id}"
         return self._get(_path)
@@ -42,7 +50,11 @@ class Dataset(SturdyStatsBase):
     def append(self, filepath: str):
         """
         Upload parquet chunk
-        → POST /datasets/{dataset_id}/append
+        
+        Route: POST /datasets/{dataset_id}/append
+        
+        Args:
+            filepath: path to a .parquet file or directory of .parquet files
         """
         _path = f"datasets/{self.id}/append"
         return self._send_parquet(_path, filepath)
@@ -50,7 +62,11 @@ class Dataset(SturdyStatsBase):
     def commit(self, metadata_json = None):
         """
         Commit dataset
-        → POST /datasets/{dataset_id}/commit
+        
+        Route: POST /datasets/{dataset_id}/commit
+        
+        Args:
+            metadata_json (default: None) — Optional JSON metadata to associate with the dataset. Stored as-is and returned on get/list.
         """
         _path = f"datasets/{self.id}/commit"
         _body = {k: v for k, v in {

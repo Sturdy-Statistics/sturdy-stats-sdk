@@ -3,11 +3,17 @@ from .base import SturdyStatsBase
 
 
 class Index(SturdyStatsBase):
+    """An index is a sparse topic model trained exclusively on a committed dataset. The model automatically infers interpretable topics and topic groups, then annotates every sentence, paragraph, and document with thematic content — storing the result as a structured, SQL-queryable data lake (DuckDB). Because the model uses joint probability rather than neural embeddings, the structure is explicit and inspectable: topics correspond to meaningful concepts, most values are zero, and every annotation can be traced back to specific passages.
+
+Because topic annotations are stored as structured columns alongside any metadata you upload, you can jointly analyze thematic content and outcome metrics — surfacing which topics drive ratings, conversions, revenue, or any other signal you care about. This makes it possible not just to describe what your data is about, but to explain why metrics move.
+
+Once `ready`, the index exposes four query endpoints that compose naturally: `topics/search` returns the topic inventory for a filtered unit set with mention counts and prevalence — use this to discover which topics exist and get their IDs; `topics/diff` uses a Bayesian comparison to identify topics significantly more prevalent in one segment versus another; `docs/search` retrieves and ranks units using a blend of exact match and semantic search, topic filters, and SQL filters; and `sql` runs arbitrary DuckDB SQL against the entity views directly. All endpoints operate at a configurable granularity level (`doc`, `paragraph`, or `sentence`), and all user-uploaded metadata columns are available as filter targets at every level."""
 
     def list(self, transform = None):
         """
         List indices
-        → GET /indices
+
+        Route: GET /indices
         """
         _path = f"indices"
         _resp = self._get(_path)
@@ -19,7 +25,21 @@ class Index(SturdyStatsBase):
     def create(cls, name, dataset_id, private_annotations = False, model_arch = 'aalda-para', burn_in = 5000, sample = 150, n_topics = 192, training_overrides = None, org_id = None, api_key = None, base_url = None):
         """
         Create index and kick off training
-        → POST /indices
+
+        Route: POST /indices
+
+        Args:
+            name — Human-readable name for this index.
+            dataset_id — ID of the committed dataset to build the index from. The dataset must be committed before training.
+            private_annotations (default: False) — Reserved for future use.
+            model_arch (default: 'aalda-para') — Topic model architecture to train:
+   - "aalda-para": paragraph-level topic model, best general-purpose choice
+   - "aalda": document-level topics
+   - "aalda-para-sent": paragraph + sentence level topics
+            burn_in (default: 5000) — Number of burn-in training iterations before sampling begins. Higher values improve topic quality at the cost of training time.
+            sample (default: 150) — Number of posterior samples collected after burn-in. More samples give more stable topic estimates.
+            n_topics (default: 192) — Upper bound on the number of topics to discover. Higher values produce finer-grained topics and increase training time linearly.
+            training_overrides (default: None) — Advanced training overrides. Leave nil unless instructed.
         """
         _path = f"indices"
         _body = {k: v for k, v in {
@@ -40,7 +60,8 @@ class Index(SturdyStatsBase):
     def status(self):
         """
         Get index
-        → GET /indices/{index_id}
+
+        Route: GET /indices/{index_id}
         """
         _path = f"indices/{self.id}"
         return self._get(_path)
@@ -48,7 +69,37 @@ class Index(SturdyStatsBase):
     def topics_search(self, level, filter = None, topic_mention_cutoff = 2.0, search_query = None, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, transform = None):
         """
         Topic inventory for a filtered set of units
-        → POST /indices/{index_id}/topics/search
+
+        Route: POST /indices/{index_id}/topics/search
+
+        Args:
+            level — Granularity level to operate at. Each level corresponds to a view over the index:
+   - "doc": one row per document
+   - "paragraph": one row per paragraph (adds paragraph_idx)
+   - "subparagraph": one row per subparagraph (adds paragraph_idx, subparagraph_idx)
+   - "sentence": one row per sentence (adds paragraph_idx, subparagraph_idx, sentence_idx)
+
+   All levels expose: doc_id, text, topic_count MAP(SMALLINT, FLOAT),
+   topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
+   and all metadata columns from the original dataset (everything beyond the required
+   doc_id and doc columns).
+            filter (default: None) — Optional SQL WHERE clause (DuckDB syntax) applied against the entity view at the selected level.
+   Available columns at all levels:
+   - doc_id (VARCHAR): document identifier
+   - text (VARCHAR): text content at this granularity
+   - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
+   - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
+   - semantic_topic_count (MAP(VARCHAR, FLOAT)): topic weight keyed by topic label string
+   - All metadata columns from the original dataset (the columns you uploaded beyond doc_id/doc)
+   Additional columns by level:
+   - paragraph and above: paragraph_idx (USMALLINT)
+   - subparagraph and above: subparagraph_idx (USMALLINT)
+   - sentence: sentence_idx (USMALLINT)
+   Example: "rating > 4 AND is_verified = true"
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         """
         _path = f"indices/{self.id}/topics/search"
         _body = {k: v for k, v in {
@@ -67,7 +118,29 @@ class Index(SturdyStatsBase):
     def topics_diff(self, level, filter1, filter2, topic_mention_cutoff = 2.0, prior_weight = 10.0, confidence_cutoff = 0.95, search_query1 = None, search_query2 = None, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, transform = None):
         """
         Bayesian topic diff between two filtered sets of units
-        → POST /indices/{index_id}/topics/diff
+
+        Route: POST /indices/{index_id}/topics/diff
+
+        Args:
+            level — Granularity level to operate at. Each level corresponds to a view over the index:
+   - "doc": one row per document
+   - "paragraph": one row per paragraph (adds paragraph_idx)
+   - "subparagraph": one row per subparagraph (adds paragraph_idx, subparagraph_idx)
+   - "sentence": one row per sentence (adds paragraph_idx, subparagraph_idx, sentence_idx)
+
+   All levels expose: doc_id, text, topic_count MAP(SMALLINT, FLOAT),
+   topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
+   and all metadata columns from the original dataset (everything beyond the required
+   doc_id and doc columns).
+            filter1 — SQL WHERE clause defining the first (target) unit set. See filter description for available columns.
+            filter2 — SQL WHERE clause defining the second (reference) unit set to compare against.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            prior_weight (default: 10.0) — Strength of the empirical Bayes prior when comparing topic prevalences. Higher values shrink estimates toward the global baseline, suppressing noise on low-mention topics.
+            confidence_cutoff (default: 0.95) — Minimum posterior probability that topic prevalence in filter1 exceeds filter2 for a topic to be included in results.
+            search_query1 (default: None) — Search query to further scope the first unit set semantically.
+            search_query2 (default: None) — Search query to further scope the second unit set semantically.
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         """
         _path = f"indices/{self.id}/topics/diff"
         _body = {k: v for k, v in {
@@ -90,7 +163,40 @@ class Index(SturdyStatsBase):
     def search(self, level, search_query = None, filter = None, topic_ids = None, sort_by = 'relevance', topic_mention_cutoff = 2.0, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, limit = 20, transform = None):
         """
         Ranked unit retrieval with optional semantic search and topic filter
-        → POST /indices/{index_id}/docs/search
+
+        Route: POST /indices/{index_id}/docs/search
+
+        Args:
+            level — Granularity level to operate at. Each level corresponds to a view over the index:
+   - "doc": one row per document
+   - "paragraph": one row per paragraph (adds paragraph_idx)
+   - "subparagraph": one row per subparagraph (adds paragraph_idx, subparagraph_idx)
+   - "sentence": one row per sentence (adds paragraph_idx, subparagraph_idx, sentence_idx)
+
+   All levels expose: doc_id, text, topic_count MAP(SMALLINT, FLOAT),
+   topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
+   and all metadata columns from the original dataset (everything beyond the required
+   doc_id and doc columns).
+            search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
+            filter (default: None) — Optional SQL WHERE clause (DuckDB syntax) applied against the entity view at the selected level.
+   Available columns at all levels:
+   - doc_id (VARCHAR): document identifier
+   - text (VARCHAR): text content at this granularity
+   - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
+   - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
+   - semantic_topic_count (MAP(VARCHAR, FLOAT)): topic weight keyed by topic label string
+   - All metadata columns from the original dataset (the columns you uploaded beyond doc_id/doc)
+   Additional columns by level:
+   - paragraph and above: paragraph_idx (USMALLINT)
+   - subparagraph and above: subparagraph_idx (USMALLINT)
+   - sentence: sentence_idx (USMALLINT)
+   Example: "rating > 4 AND is_verified = true"
+            topic_ids (default: None) — Filter results to units that mention these topic IDs (integer IDs from the topics/search endpoint). Units are ranked by their combined score for these topics.
+            sort_by (default: 'relevance') — SQL expression for ORDER BY DESC. The special value "relevance" auto-selects: search_score * topic_score (both), search_score (search only), topic_score (topics only), doc_id (neither).
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            limit (default: 20) — Maximum number of results to return.
         """
         _path = f"indices/{self.id}/docs/search"
         _body = {k: v for k, v in {
@@ -112,7 +218,27 @@ class Index(SturdyStatsBase):
     def sql(self, sql, search_query = None, search_level = None, topic_mention_cutoff = 2.0, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, transform = None):
         """
         Run a SQL query against the index
-        → POST /indices/{index_id}/sql
+
+        Route: POST /indices/{index_id}/sql
+
+        Args:
+            sql — SQL SELECT statement (DuckDB syntax) to run against the index. Returns results as a parquet file (application/vnd.apache.parquet).
+
+   Available views:
+   - doc, paragraph, subparagraph, sentence — entity views at each granularity level.
+     All views expose: doc_id (VARCHAR), text (VARCHAR), topic_count MAP(SMALLINT, FLOAT),
+     topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
+     plus all metadata columns from the original dataset (beyond the required doc_id/doc columns).
+     Finer levels add: paragraph_idx (USMALLINT), subparagraph_idx (USMALLINT), sentence_idx (USMALLINT).
+   - topics — global topic reference table: id (SMALLINT), group_id (SMALLINT),
+     label (VARCHAR), group_label (VARCHAR), c (BIGINT total count)
+
+   Multi-statement SQL (semicolons mid-query) is rejected; use CTEs instead. Trailing semicolons are stripped.
+            search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
+            search_level (default: None) — Granularity level to use for search setup when search-query is provided. Required if search-query is set.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         """
         _path = f"indices/{self.id}/sql"
         _body = {k: v for k, v in {

@@ -3,11 +3,13 @@ from .base import SturdyStatsBase
 
 
 class ClfModel(SturdyStatsBase):
+    """Classification is a two-stage process. First, pretrain a **clf-base** — a topic-aware base model trained over a committed dataset. Pretraining is computationally expensive and runs asynchronously. Once the clf-base is `ready`, train one or more **clf-models** on top of it: each clf-model learns to predict a set of label columns present in the training dataset. clf-models are designed for scalability and high-throughput inference, and require a minimum of 32 labeled examples per class. For few-shot or exploratory classification with less data, training a classifier via the index is more robust."""
 
     def list(self, transform = None):
         """
         List clf-models
-        → GET /classifiers/models
+        
+        Route: GET /classifiers/models
         """
         _path = f"classifiers/models"
         _resp = self._get(_path)
@@ -19,7 +21,14 @@ class ClfModel(SturdyStatsBase):
     def create(cls, clf_base_id, dataset_id, model_name, fields, org_id = None, api_key = None, base_url = None):
         """
         Train a clf-model
-        → POST /classifiers/models
+        
+        Route: POST /classifiers/models
+        
+        Args:
+            clf_base_id — ID of the ready clf-base to fine-tune this classifier on top of.
+            dataset_id — ID of the committed dataset containing the label columns to train on.
+            model_name — Human-readable name for this clf-model.
+            fields — The label column names from the training dataset that this classifier predicts. These must be columns present in the dataset used for training.
         """
         _path = f"classifiers/models"
         _body = {k: v for k, v in {
@@ -36,7 +45,8 @@ class ClfModel(SturdyStatsBase):
     def status(self):
         """
         Get clf-model
-        → GET /classifiers/models/{clf_model_id}
+        
+        Route: GET /classifiers/models/{clf_model_id}
         """
         _path = f"classifiers/models/{self.id}"
         return self._get(_path)
@@ -44,7 +54,11 @@ class ClfModel(SturdyStatsBase):
     def predict_one(self, doc):
         """
         Classify a single document
-        → POST /classifiers/models/{clf_model_id}/predict/one
+        
+        Route: POST /classifiers/models/{clf_model_id}/predict/one
+        
+        Args:
+            doc — The document text to classify.
         """
         _path = f"classifiers/models/{self.id}/predict/one"
         _body = {k: v for k, v in {
