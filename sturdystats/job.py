@@ -1,87 +1,43 @@
-from __future__ import annotations
+import time
 
-import requests
-import os
-from time import sleep
+from .base import SturdyStatsSdkError
 
-import pandas as pd
-import srsly
-from tenacity import (
-    retry,
-    stop_after_delay,
-    wait_exponential
-)
 
-# for type checking
-from typing import Dict
-from requests.models import Response
+_TERMINAL_OK = {"succeeded"}
+_TERMINAL_FAIL = {"failed", "cancelled"}
+_TERMINAL = _TERMINAL_OK | _TERMINAL_FAIL
 
 
 class Job:
-    def __init__(self, API_key: str,
-                 job_id: str, poll_seconds: int = 1,
-                 msgpack: bool = True,
-                 _base_url: str= "https://legacy-api.sturdystatistics.com/api/v1/job"):
-        self.API_key = API_key or os.environ["STURDY_STATS_API_KEY"]
+    """Represents an in-flight async job. Call wait() to block until complete.
+    → GET /jobs/{job-id}
+    """
+
+    def __init__(self, base, job_id: str):
+        self._base = base
         self.job_id = job_id
-        self.poll_seconds = poll_seconds
-        self.base_url = _base_url
-        self.msgpack = msgpack
 
-    def _check_status(self, info: Response) -> None:
-        if info.status_code != 200:
-            raise requests.HTTPError(info.content)
+    def status(self) -> dict:
+        """Fetch current job state.
+        → GET /jobs/{job-id}
+        """
+        return self._base._get(f"jobs/{self.job_id}")
 
-    def _post(self, url: str, params: Dict) -> Response:
-        payload = {**params}
-        res = requests.post(self.base_url + url, json=payload, headers={"x-api-key": self.API_key})
-        self._check_status(res)
-        return res
-
-    @retry(wait=wait_exponential(),
-           stop=(stop_after_delay(240)))
-    def _get_retry(self, url: str, params: Dict) -> Response:
-        res = requests.get(self.base_url + url , params=params, headers={"x-api-key": self.API_key})
-        return res
-
-    @retry(wait=wait_exponential(),
-           stop=(stop_after_delay(2)))
-    def _get(self, url: str, params: Dict) -> Response:
-        res = self._get_retry(url, params)
-        self._check_status(res)
-        return res
-
-    def get_status(self) -> dict:
-        res = self._get("/"+self.job_id, dict(msgpack=self.msgpack))
-        res = srsly.msgpack_loads(res.content) if self.msgpack else res.json()
-        return res # type: ignore
-
-    def print_status(self):
-        st = self.get_status()
-        t0 = pd.Timestamp(st['finishedAt']) if 'finishedAt' in st else pd.Timestamp.now(tz='UTC')
-        dt = t0 - pd.Timestamp(st['startedAt'])
-        # format time elapsed as hh:mm:ss
-        y = dt.total_seconds()
-        h = 3600
-        tstr = f'{int(y/h):02d}h:{int(y%h/60):02d}m:{int(y%60):02d}s'
-        # one-line message
-        print(f"""{st['status']} - {tstr}""")
-
-    def _is_running(self):
-        status = self.get_status()
-        return status["status"] not in ["FAILED", "SUCCEEDED", "CANCELLED"]
-
-    def wait(self) -> dict:
-        poll_seconds = .5
+    def wait(self, poll_interval_start: float = 1.0, poll_interval_max: float = 60.0) -> dict:
+        """Block until job reaches a terminal state. Returns final job dict.
+        Raises SturdyStatsSdkError if the job fails or is cancelled.
+        → GET /jobs/{job-id}
+        """
+        interval = poll_interval_start
         while True:
-            if not self._is_running():
-                break
-            sleep(poll_seconds)
-            poll_seconds = min(self.poll_seconds, poll_seconds+.3)
-        status = self.get_status()
-        if status["status"] == "FAILED":
-            raise Exception(f"Job {self.job_id} failed with the following error: {status['error']}")
-        return status
+            data = self.status()
+            s = data.get("status")
+            if s in _TERMINAL_OK:
+                return data
+            if s in _TERMINAL_FAIL:
+                raise SturdyStatsSdkError(0, f"Job {self.job_id} ended with status '{s}': {data}")
+            time.sleep(interval)
+            interval = min(interval * 1.5, poll_interval_max)
 
-    def cancel(self) -> dict:
-        return self._post(f"/{self.job_id}/cancel", dict()).json()
+    def __repr__(self):
+        return f"Job(id={self.job_id!r})"

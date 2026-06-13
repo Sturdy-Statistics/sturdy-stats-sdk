@@ -1,0 +1,139 @@
+{
+  "entities": [
+    {
+      "class": "Dataset",
+      "tag": "datasets",
+      "id_param": "dataset_id",
+      "id_field": "dataset-id",
+      "wait_poll": "GET /datasets/{dataset_id}/status",
+      "wait_status_field": "current-state",
+      "wait_ready": "ready",
+      "wait_failed": ["failed"],
+      "methods": [
+        {
+          "name": "list",
+          "route": "GET /datasets",
+          "response_key": ["datasets"]
+        },
+        {
+          "name": "create",
+          "route": "POST /datasets"
+        },
+        {
+          "name": "status",
+          "route": "GET /datasets/{dataset_id}"
+        },
+        {
+          "name": "append",
+          "route": "POST /datasets/{dataset_id}/append",
+          "type": "upload_parquet"
+        },
+        {
+          "name": "commit",
+          "route": "POST /datasets/{dataset_id}/commit"
+        }
+      ]
+    },
+    {
+      "class": "Index",
+      "tag": "indices",
+      "id_param": "index_id",
+      "id_field": "index-id",
+      "wait_poll": "GET /indices/{index_id}",
+      "wait_status_field": "status",
+      "wait_ready": "ready",
+      "wait_failed": ["failed"],
+      "methods": [
+        {
+          "name": "list",
+          "route": "GET /indices",
+          "response_key": ["indices"]
+        },
+        {
+          "name": "create",
+          "route": "POST /indices"
+        },
+        {
+          "name": "status",
+          "route": "GET /indices/{index_id}"
+        },
+        {
+          "name": "topics_search",
+          "route": "POST /indices/{index_id}/topics/search",
+          "response_key": ["topics"]
+        },
+        {
+          "name": "topics_diff",
+          "route": "POST /indices/{index_id}/topics/diff",
+          "response_key": ["topics"]
+        },
+        {
+          "name": "search",
+          "route": "POST /indices/{index_id}/docs/search",
+          "response_key": ["results"]
+        },
+        {
+          "name": "sql",
+          "route": "POST /indices/{index_id}/sql",
+          "type": "parquet_response"
+        }
+      ]
+    },
+    {
+      "class": "ClfBase",
+      "tag": "classifiers",
+      "tag_filter": "bases",
+      "id_param": "clf_base_id",
+      "id_field": "clf-base-id",
+      "wait_poll": "GET /classifiers/bases/{clf_base_id}",
+      "wait_status_field": "status",
+      "wait_ready": "ready",
+      "wait_failed": ["failed"],
+      "methods": [
+        {
+          "name": "list",
+          "route": "GET /classifiers/bases",
+          "response_key": ["clf-bases"]
+        },
+        {
+          "name": "create",
+          "route": "POST /classifiers/bases"
+        },
+        {
+          "name": "status",
+          "route": "GET /classifiers/bases/{clf_base_id}"
+        }
+      ]
+    },
+    {
+      "class": "ClfModel",
+      "tag": "classifiers",
+      "tag_filter": "models",
+      "id_param": "clf_model_id",
+      "id_field": "clf-model-id",
+      "wait_poll": "GET /classifiers/models/{clf_model_id}",
+      "wait_status_field": "status",
+      "wait_ready": "ready",
+      "wait_failed": ["failed"],
+      "methods": [
+        {
+          "name": "list",
+          "route": "GET /classifiers/models",
+          "response_key": ["clf-models"]
+        },
+        {
+          "name": "create",
+          "route": "POST /classifiers/models"
+        },
+        {
+          "name": "status",
+          "route": "GET /classifiers/models/{clf_model_id}"
+        },
+        {
+          "name": "predict_one",
+          "route": "POST /classifiers/models/{clf_model_id}/predict/one"
+        }
+      ]
+    }
+  ]
+}
