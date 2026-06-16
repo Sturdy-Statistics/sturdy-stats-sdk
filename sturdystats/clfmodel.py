@@ -29,7 +29,7 @@ class ClfModel(SturdyStatsBase):
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
-        List clf-models
+        List all clf-models visible to the caller within this organisation.
         
         Route: GET /classifiers/models
         
@@ -53,7 +53,7 @@ class ClfModel(SturdyStatsBase):
     @classmethod
     def create(cls, clf_base_id: str, dataset_id: str, model_name: str, fields: list, org_id = None, api_key = None, base_url = None) -> "ClfModel":
         """
-        Train a clf-model
+        Fine-tune a classifier on top of a ready clf-base using a committed dataset. Training runs asynchronously — poll /jobs/:id until status is ready. The clf-base must be ready, and the dataset must be committed. The fields specified must be column names present in the training dataset.
         
         Route: POST /classifiers/models
         
@@ -80,7 +80,7 @@ class ClfModel(SturdyStatsBase):
 
     def status(self) -> ClfModelStatusResponse:
         """
-        Get clf-model details
+        Get a single clf-model's metadata by ID, including training status and job details.
         
         Route: GET /classifiers/models/{clf_model_id}
         
@@ -101,7 +101,7 @@ class ClfModel(SturdyStatsBase):
 
     def predict_one(self, doc: str) -> ClfModelPredictOneResponse:
         """
-        Classify
+        Run inference on a single document using a ready clf-model. Returns a score for each label field the model was trained on.
         
         Route: POST /classifiers/models/{clf_model_id}/predict/one
         

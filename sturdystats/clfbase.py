@@ -23,7 +23,7 @@ class ClfBase(SturdyStatsBase):
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
-        List clf-bases
+        List all clf-bases visible to the caller within this organisation.
         
         Route: GET /classifiers/bases
         
@@ -45,7 +45,7 @@ class ClfBase(SturdyStatsBase):
     @classmethod
     def create(cls, dataset_id: str, model_name: str, org_id = None, api_key = None, base_url = None) -> "ClfBase":
         """
-        Pretrain a clf-base
+        Kick off pretraining of a topic-aware base model over a committed dataset. Pretraining runs asynchronously — poll /jobs/:id until status is ready. The clf-base must be ready before any clf-model can be trained on top of it.
         
         Route: POST /classifiers/bases
         
@@ -68,7 +68,7 @@ class ClfBase(SturdyStatsBase):
 
     def status(self) -> ClfBaseStatusResponse:
         """
-        Get clf-base details
+        Get a single clf-base's metadata by ID, including training status and job details.
         
         Route: GET /classifiers/bases/{clf_base_id}
         

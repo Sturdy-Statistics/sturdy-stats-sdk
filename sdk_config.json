@@ -54,6 +54,10 @@
           "route": "POST /indices"
         },
         {
+          "name": "append",
+          "route": "POST /indices/{index_id}/append"
+        },
+        {
           "name": "status",
           "route": "GET /indices/{index_id}"
         },

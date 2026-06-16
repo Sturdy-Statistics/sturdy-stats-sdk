@@ -29,7 +29,7 @@ class Dataset(SturdyStatsBase):
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
-        List datasets
+        List all datasets visible to the caller within this organisation.
         
         Route: GET /datasets
         
@@ -48,7 +48,7 @@ class Dataset(SturdyStatsBase):
     @classmethod
     def create(cls, name: str, metadata_json: Any = None, org_id = None, api_key = None, base_url = None) -> "Dataset":
         """
-        Create dataset
+        Create a new empty dataset. After creation, upload parquet chunks via the append endpoint, then call commit to finalise. The uploaded parquet files must contain at least a `doc_id` (VARCHAR) and `doc` (VARCHAR, non-empty) column; all other columns are preserved as queryable metadata.
         
         Route: POST /datasets
         
@@ -71,7 +71,7 @@ class Dataset(SturdyStatsBase):
 
     def status(self) -> DatasetStatusResponse:
         """
-        Get dataset details
+        Get a single dataset's metadata by ID, including size and upload count.
         
         Route: GET /datasets/{dataset_id}
         
@@ -91,7 +91,7 @@ class Dataset(SturdyStatsBase):
 
     def append(self, filepath: str) -> list[dict]:
         """
-        Append batch
+        Append a parquet file chunk to an open dataset. Can be called concurrently. The dataset must not yet be committed. Each file must contain `doc_id` and `doc` columns; additional columns become queryable metadata on the index.
         
         Route: POST /datasets/{dataset_id}/append
         
@@ -109,7 +109,7 @@ class Dataset(SturdyStatsBase):
 
     def commit(self, metadata_json: Any = None) -> DatasetCommitResponse:
         """
-        Commit dataset
+        Seal the dataset and trigger finalisation. No further chunks can be appended after this call. Finalisation (compaction to a single duckdb file) runs asynchronously — poll `GET /datasets/:id` until `status` is `ready`. A committed dataset can be used to train a clf-base or index.
         
         Route: POST /datasets/{dataset_id}/commit
         

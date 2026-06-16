@@ -7,6 +7,12 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
+IndexAppendResponse = TypedDict("IndexAppendResponse", {
+    'index-id': str,
+    'job-id': str,
+    'dataset-id': str,
+})
+
 IndexStatusResponse = TypedDict("IndexStatusResponse", {
     'id': str,
     'name': str,
@@ -27,7 +33,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
-        List indices
+        List all indices visible to the caller within this organisation.
         
         Route: GET /indices
         
@@ -49,7 +55,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
     @classmethod
     def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
-        Create index and kick off training
+        Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `ready`. The index must be ready before any query endpoints can be used.
         
         Route: POST /indices
         
@@ -87,9 +93,30 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
         _inst.id = _resp.get('index-id')
         return _inst
 
+    def append(self, dataset_id: str) -> IndexAppendResponse:
+        """
+        Kick off prediction of a committed dataset against an existing index. Runs asynchronously — poll `/jobs/:id` until status is `ready`.
+        
+        Route: POST /indices/{index_id}/append
+        
+        Args:
+            dataset_id — ID of the committed dataset to append to the index.
+        
+        Returns:
+            IndexAppendResponse, a dict with:
+                index-id (str):
+                job-id (str):
+                dataset-id (str):
+        """
+        _path = f"indices/{self.id}/append"
+        _body = {k: v for k, v in {
+            'dataset-id': dataset_id,
+        }.items() if v is not None}
+        return self._post(_path, _body)
+
     def status(self) -> IndexStatusResponse:
         """
-        Get index details
+        Get a single index's metadata by ID, including training status and job details.
         
         Route: GET /indices/{index_id}
         
@@ -108,7 +135,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def topics_search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], filter: Optional[str] = None, topic_mention_cutoff: float = 2.0, search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
         """
-        Topic Search
+        Returns a high level rollup of the topics present in ny filtered subset of the index. The response provides the raw number of times that topic occurs (mentions) and the percentage of the filtered corpus in which that topics occurss (prevalence). The level parameter dicates at what level the metrics are measures. For example, if the level is set to 'doc', 13 mentions means that the topic occurred in 13 documents. If the level is set to 'paragraph', 25 mentions means the topic occurred in 25 paragraphs. If a topic occurs in 25 out of 50 paragraphs, its prevalance is 50%.
         
         Route: POST /indices/{index_id}/topics/search
         
@@ -165,7 +192,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def topics_diff(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], filter1: str, filter2: str, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, confidence_cutoff: float = 0.95, search_query1: Optional[str] = None, search_query2: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
         """
-        Topic Diff
+        Compares topic prevalence between two unit sets defined by SQL filters and returns topics that are significantly more prevalent in the first set. This endpoint is helpful to extract topics that occur more frequently in one group than another, via empirical Bayes beta-binomial statistics — `confidence` is the posterior probability that topic prevalence in filter1 exceeds filter2. Only topics above `confidence-cutoff` are returned, ordered by confidence descending. This endpoint is extremely useful for outlier detection or semantic comparisons of distinct groups.
         
         Route: POST /indices/{index_id}/topics/diff
         
@@ -223,7 +250,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], search_query: Optional[str] = None, filter: Optional[str] = None, topic_ids: Optional[list] = None, sort_by: str = 'relevance', topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, limit: int = 20, transform = None) -> "pd.DataFrame":
         """
-        Search & Retrieval
+        Retrieve and rank units from the index at a given granularity level. Supports three independent signals that can be combined freely: a natural language search query (keyword + semantic), a list of topic IDs to filter and score by, and a SQL filter against any column in the entity view. Results include per-unit scores and aggregated topic info.
         
         Route: POST /indices/{index_id}/docs/search
         
@@ -288,7 +315,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def sql(self, sql: str, search_query: Optional[str] = None, search_level: Optional[Literal['doc', 'paragraph', 'subparagraph', 'sentence']] = None, topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
         """
-        SQL
+        Execute arbitrary SQL against the index entity views. Returns results as a parquet file. This is the full-flexibility escape hatch — anything expressible in SQL works here, including aggregations, joins to the topics table, and window functions. See the `sql` field description for the full view schema. The parquet response is capped at 25 MB; larger results return 413 — narrow the query or page with LIMIT/OFFSET (with an ORDER BY).
         
         Route: POST /indices/{index_id}/sql
         
