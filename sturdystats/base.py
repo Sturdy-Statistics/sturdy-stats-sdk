@@ -1,6 +1,5 @@
 import os
 import io
-import pandas as pd
 import requests
 
 
@@ -74,14 +73,20 @@ class SturdyStatsBase:
         return results
 
     def _load_parquet(self, path: str, body: dict = None, transform=None):
-        """POST to a parquet-returning endpoint, load into a pandas DataFrame.
+        """POST to a parquet-returning endpoint, load into a pandas DataFrame via DuckDB.
         → POST path  (e.g. indices/{id}/sql)
+        Bytes are read into an Arrow table in memory, then handed to DuckDB so MAP
+        columns — e.g. topic_count MAP(SMALLINT, FLOAT) — materialize as real Python
+        dicts rather than pandas' list-of-tuples. No temp files.
         Optionally apply transform(df) -> df before returning.
         """
+        import duckdb
+        import pyarrow.parquet as pq
+
         resp = self._session.post(self._url(path), json=body or {})
         self._raise(resp)
-        buf = io.BytesIO(resp.content)
-        df = pd.read_parquet(buf)
+        arrow_table = pq.read_table(io.BytesIO(resp.content))
+        df = duckdb.from_arrow(arrow_table).df()
         if transform is not None:
             df = transform(df)
         return df

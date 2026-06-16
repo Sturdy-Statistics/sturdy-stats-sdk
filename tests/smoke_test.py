@@ -67,7 +67,7 @@ print(idx.search(
 
 print("\n--- sql ---")
 print(idx.sql(
-    sql="SELECT doc_id, text FROM doc LIMIT 5",
+    sql="SELECT doc_id, text, topic_prevalence FROM doc LIMIT 5",
     topic_mention_cutoff=2.0,
     semantic_search_cutoff=0.1,
     semantic_search_weight=0.3,
