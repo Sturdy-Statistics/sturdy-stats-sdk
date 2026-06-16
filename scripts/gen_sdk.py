@@ -40,6 +40,41 @@ def get_operation(spec: dict, short_route: str) -> dict:
     return op
 
 
+OPENAPI_TYPE_MAP = {
+    "string": "str",
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+    "object": "dict",
+    "array": "list",
+}
+
+
+def py_type(info: dict) -> str:
+    """Map an OpenAPI property schema to a Python type annotation string."""
+    enum = info.get("enum")
+    if enum and all(isinstance(e, (str, int, bool)) for e in enum):
+        return "Literal[" + ", ".join(repr(e) for e in enum) + "]"
+    # nullable / union expressed via oneOf/anyOf: pick non-null branches
+    for key in ("oneOf", "anyOf"):
+        if key in info:
+            branches = info[key]
+            nullable = any(b.get("type") == "null" for b in branches)
+            non_null = [b for b in branches if b.get("type") != "null"]
+            inner = py_type(non_null[0]) if non_null else "Any"
+            return f"Optional[{inner}]" if nullable else inner
+    return OPENAPI_TYPE_MAP.get(info.get("type"), "Any")
+
+
+def _unwrap_schema(schema: dict) -> dict:
+    """Flatten a top-level allOf wrapper down to the object that has properties."""
+    if "allOf" in schema and "properties" not in schema:
+        for s in schema["allOf"]:
+            if "properties" in s:
+                return s
+    return schema
+
+
 def get_body_params(op: dict) -> list[dict]:
     rb = op.get("requestBody", {})
     schema = None
@@ -49,11 +84,7 @@ def get_body_params(op: dict) -> list[dict]:
             break
     if schema is None:
         return []
-    if "allOf" in schema and "properties" not in schema:
-        for s in schema["allOf"]:
-            if "properties" in s:
-                schema = s
-                break
+    schema = _unwrap_schema(schema)
     props = schema.get("properties", {})
     required = set(schema.get("required", []))
     params = []
@@ -64,8 +95,86 @@ def get_body_params(op: dict) -> list[dict]:
             "required": name in required and info.get("default") is None,
             "description": info.get("description", ""),
             "default": info.get("default"),
+            "py_type": py_type(info),
         })
     return params
+
+
+def get_response_props(op: dict) -> list[dict]:
+    """Return the property list of the lowest 2xx JSON success response, if any."""
+    responses = op.get("responses", {})
+    codes = sorted(c for c in responses if c.startswith("2"))
+    for code in codes:
+        content = responses[code].get("content", {})
+        schema = content.get("application/json", {}).get("schema")
+        if not schema:
+            continue
+        schema = _unwrap_schema(schema)
+        props = schema.get("properties", {})
+        if not props:
+            continue
+        out = []
+        for name, info in props.items():
+            out.append({
+                "name": name,
+                "py_type": py_type(info),
+                "description": info.get("description", ""),
+            })
+        return out
+    return []
+
+
+def get_dataframe_columns(op: dict, response_key: list) -> list[dict]:
+    """For a response_key path (e.g. ['datasets']) pointing at an array, return the
+    item property list — these become the DataFrame columns.
+    """
+    responses = op.get("responses", {})
+    codes = sorted(c for c in responses if c.startswith("2"))
+    for code in codes:
+        schema = responses[code].get("content", {}).get("application/json", {}).get("schema")
+        if not schema:
+            continue
+        node = _unwrap_schema(schema)
+        for k in (response_key or []):
+            node = _unwrap_schema(node.get("properties", {}).get(k, {}))
+        items = node.get("items")
+        if not items:
+            continue
+        items = _unwrap_schema(items)
+        props = items.get("properties", {})
+        return [{
+            "name": name,
+            "py_type": py_type(info),
+            "description": info.get("description", ""),
+        } for name, info in props.items()]
+    return []
+
+
+def format_desc(desc: str, first_prefix: str, cont_indent: str) -> list[str]:
+    """Render a possibly multi-line description as docstring lines.
+
+    The first source line follows `first_prefix`; every continuation line is
+    stripped and re-indented to `cont_indent` so wrapped text hangs neatly under
+    the entry. Blank lines are preserved (without trailing whitespace).
+    """
+    parts = (desc or "").split("\n")
+    out = [first_prefix + parts[0].strip()]
+    for ln in parts[1:]:
+        s = ln.strip()
+        out.append(cont_indent + s if s else "")
+    return out
+
+
+def field_doc_lines(props: list[dict]) -> list[str]:
+    """Render response/column field entries as aligned docstring lines."""
+    lines = []
+    for p in props:
+        head = f"                {p['name']} ({p['py_type']}): "
+        if p["description"]:
+            lines.extend(format_desc(p["description"], head, " " * 20))
+        else:
+            lines.append(head.rstrip())
+    return lines
 
 
 def get_description(op: dict) -> str:
@@ -79,7 +188,7 @@ def get_tag_description(spec: dict, tag_name: str) -> str:
     return ""
 
 
-def render_method(method_cfg: dict, spec: dict, entity_cfg: dict) -> str:
+def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list) -> str:
     name = method_cfg["name"]
     route = method_cfg["route"]
     http_method, path = route.split(" ", 1)
@@ -111,10 +220,16 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict) -> str:
         required_params = [bp for bp in body_params if bp["required"]]
         optional_params = [bp for bp in body_params if not bp["required"]]
         for bp in required_params:
-            sig_parts.append(bp["py_name"])
+            sig_parts.append(f"{bp['py_name']}: {bp['py_type']}")
         for bp in optional_params:
             d = bp["default"]
-            sig_parts.append(f"{bp['py_name']} = {d!r}" if d is not None else f"{bp['py_name']} = None")
+            t = bp["py_type"]
+            if d is not None:
+                sig_parts.append(f"{bp['py_name']}: {t} = {d!r}")
+            elif t.startswith("Optional[") or t == "Any":
+                sig_parts.append(f"{bp['py_name']}: {t} = None")
+            else:
+                sig_parts.append(f"{bp['py_name']}: Optional[{t}] = None")
 
     if is_create:
         sig_parts += ["org_id = None", "api_key = None", "base_url = None"]
@@ -122,9 +237,43 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict) -> str:
     if response_key or mtype == "parquet_response":
         sig_parts.append("transform = None")
 
+    # --- return type + optional TypedDict ---
+    class_name = entity_cfg["class"]
+    returns_doc = []
+    if is_create:
+        ret_ann = f'"{class_name}"'
+        returns_doc = [f"            {class_name} instance (with .id set)."]
+    elif mtype == "upload_parquet":
+        ret_ann = "list[dict]"
+        rprops = get_response_props(op)
+        returns_doc = ["            list of response dicts, one per uploaded file, each with:"]
+        returns_doc += field_doc_lines(rprops)
+    elif mtype == "parquet_response":
+        ret_ann = '"pd.DataFrame"'
+        returns_doc = ["            pandas.DataFrame of the query result."]
+    elif response_key:
+        ret_ann = '"pd.DataFrame"'
+        cols = get_dataframe_columns(op, response_key)
+        returns_doc = ["            pandas.DataFrame with columns:"]
+        returns_doc += field_doc_lines(cols)
+    else:
+        rprops = get_response_props(op)
+        if rprops:
+            td_name = class_name + "".join(w.capitalize() for w in name.split("_")) + "Response"
+            td_lines = [f'{td_name} = TypedDict("{td_name}", {{']
+            for p in rprops:
+                td_lines.append(f'    {p["name"]!r}: {p["py_type"]},')
+            td_lines.append("})")
+            typedefs.append("\n".join(td_lines))
+            ret_ann = td_name
+            returns_doc = [f"            {td_name}, a dict with:"]
+            returns_doc += field_doc_lines(rprops)
+        else:
+            ret_ann = "dict"
+
     if is_create:
         lines.append("    @classmethod")
-    lines.append(f"    def {name}({', '.join(sig_parts)}):")
+    lines.append(f"    def {name}({', '.join(sig_parts)}) -> {ret_ann}:")
 
     # --- docstring ---
     doc = ['        """']
@@ -140,12 +289,20 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict) -> str:
     else:
         for bp in body_params:
             req_note = "" if bp["required"] else f" (default: {bp['default']!r})"
-            desc_note = f" — {bp['description']}" if bp["description"] else ""
-            arg_lines.append(f"            {bp['py_name']}{req_note}{desc_note}")
+            head = f"            {bp['py_name']}{req_note}"
+            if bp["description"]:
+                arg_lines.extend(format_desc(bp["description"], head + " — ", " " * 16))
+            else:
+                arg_lines.append(head)
     if arg_lines:
         doc.append("        ")
         doc.append("        Args:")
         doc.extend(arg_lines)
+
+    if returns_doc:
+        doc.append("        ")
+        doc.append("        Returns:")
+        doc.extend(returns_doc)
 
     if transform_import:
         doc.append(f"        Default transform: {transform_import}")
@@ -263,9 +420,23 @@ def render_class(entity_cfg: dict, spec: dict) -> str:
     tag = entity_cfg.get("tag", class_name.lower())
     tag_desc = get_tag_description(spec, tag)
 
-    lines = [
+    typedefs = []
+    method_blocks = [render_method(m, spec, entity_cfg, typedefs) for m in methods]
+
+    header = [
         "# generated by scripts/gen_sdk.py — do not edit by hand",
+        "from __future__ import annotations",
+        "from typing import Any, Literal, Optional, TYPE_CHECKING, TypedDict",
         "from .base import SturdyStatsBase",
+        "",
+        "if TYPE_CHECKING:",
+        "    import pandas as pd",
+        "",
+    ]
+    if typedefs:
+        header.append("")
+        header.append("\n\n".join(typedefs))
+    header += [
         "",
         "",
         f"class {class_name}(SturdyStatsBase):",
@@ -273,8 +444,7 @@ def render_class(entity_cfg: dict, spec: dict) -> str:
         "",
     ]
 
-    for m in methods:
-        lines.append(render_method(m, spec, entity_cfg))
+    lines = header + method_blocks
 
     wait_method = render_wait(entity_cfg)
     if wait_method:

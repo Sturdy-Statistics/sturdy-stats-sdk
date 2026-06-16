@@ -1,6 +1,5 @@
 import os
 import io
-import pandas as pd
 import requests
 
 
@@ -14,11 +13,19 @@ class SturdyStatsSdkError(Exception):
 class SturdyStatsBase:
     def __init__(
         self,
-        org_id: str = os.environ.get("STURDY_STATS_ORG_ID"),
-        api_key: str = os.environ.get("STURDY_STATS_API_KEY"),
-        base_url: str = os.environ.get("STURDY_STATS_BASE_URL", "https://api.sturdystatistics.com"),
+        org_id: str = None,
+        api_key: str = None,
+        base_url: str = None,
         id: str = None,
     ):
+        """Connection args fall back to environment variables when omitted or None:
+            org_id   ← STURDY_STATS_ORG_ID
+            api_key  ← STURDY_STATS_API_KEY
+            base_url ← STURDY_STATS_BASE_URL  (default https://api.sturdystatistics.com)
+        """
+        org_id = org_id or os.environ.get("STURDY_STATS_ORG_ID")
+        api_key = api_key or os.environ.get("STURDY_STATS_API_KEY")
+        base_url = base_url or os.environ.get("STURDY_STATS_BASE_URL", "https://api.sturdystatistics.com")
         if not org_id:
             raise ValueError("org_id is required (or set STURDY_STATS_ORG_ID)")
         if not api_key:
@@ -74,14 +81,20 @@ class SturdyStatsBase:
         return results
 
     def _load_parquet(self, path: str, body: dict = None, transform=None):
-        """POST to a parquet-returning endpoint, load into a pandas DataFrame.
+        """POST to a parquet-returning endpoint, load into a pandas DataFrame via DuckDB.
         → POST path  (e.g. indices/{id}/sql)
+        Bytes are read into an Arrow table in memory, then handed to DuckDB so MAP
+        columns — e.g. topic_count MAP(SMALLINT, FLOAT) — materialize as real Python
+        dicts rather than pandas' list-of-tuples. No temp files.
         Optionally apply transform(df) -> df before returning.
         """
+        import duckdb
+        import pyarrow.parquet as pq
+
         resp = self._session.post(self._url(path), json=body or {})
         self._raise(resp)
-        buf = io.BytesIO(resp.content)
-        df = pd.read_parquet(buf)
+        arrow_table = pq.read_table(io.BytesIO(resp.content))
+        df = duckdb.from_arrow(arrow_table).df()
         if transform is not None:
             df = transform(df)
         return df
@@ -89,14 +102,14 @@ class SturdyStatsBase:
     def _wait_for_dataset(self, dataset_id: str, poll_interval_start: float = 2.0,
                           poll_interval_max: float = 15.0, timeout: float = 1800.0):
         """Block until dataset current-state is ready or failed.
-        → GET /datasets/{dataset-id}/status
+        → GET /datasets/{dataset-id}
         """
         import time
         deadline = time.time() + timeout
         interval = poll_interval_start
         while time.time() < deadline:
-            data = self._get(f"datasets/{dataset_id}/status")
-            state = data.get("current-state")
+            data = self._get(f"datasets/{dataset_id}")
+            state = data.get("status")
             if state == "ready":
                 return data
             if state == "failed":

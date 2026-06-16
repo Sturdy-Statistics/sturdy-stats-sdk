@@ -1,4 +1,5 @@
 import sys
+import os
 sys.path.insert(0, "..")
 
 from sturdystats import Dataset, Index
@@ -6,8 +7,8 @@ from uuid import uuid4
 
 suffix = str(uuid4())[:8]
 
-ORG_ID = "o-f32b82c0-19ee-4467-be31-498faa964f97"
-API_KEY = "sturdy-platform_010001_agplibo4j5yupiarfwmcgu6samzgv4qel7h7j4um6yzifbq2ah3p54ug3zot6r4miyqtmq4cd5tgwn2en5na"
+ORG_ID = os.environ["TMP_SILAND_LOCAL_ORG"]
+API_KEY = os.environ["TMP_SILAND_LOCAL_KEY"]
 BASE_URL = "http://localhost:3333"
 PARQUET_PATH = "/Users/kian/ML/clojure/Siland/slack_reviews.parquet"
 
@@ -66,7 +67,7 @@ print(idx.search(
 
 print("\n--- sql ---")
 print(idx.sql(
-    sql="SELECT doc_id, text FROM doc LIMIT 5",
+    sql="SELECT doc_id, text, topic_prevalence FROM doc LIMIT 5",
     topic_mention_cutoff=2.0,
     semantic_search_cutoff=0.1,
     semantic_search_weight=0.3,
