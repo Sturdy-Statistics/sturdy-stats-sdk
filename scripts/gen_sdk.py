@@ -178,7 +178,7 @@ def field_doc_lines(props: list[dict]) -> list[str]:
 
 
 def get_description(op: dict) -> str:
-    return op.get("summary", "") or op.get("description", "") or ""
+    return (op.get("description", "") or op.get("summary", "") or "")
 
 
 def get_tag_description(spec: dict, tag_name: str) -> str:
@@ -275,7 +275,7 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
         lines.append("    @classmethod")
     lines.append(f"    def {name}({', '.join(sig_parts)}) -> {ret_ann}:")
 
-    # --- docstring ---
+    # --- docstring ---  (order: description, route, params, returns)
     doc = ['        """']
     if description:
         doc.append(f"        {description}")
