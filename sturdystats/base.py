@@ -13,11 +13,19 @@ class SturdyStatsSdkError(Exception):
 class SturdyStatsBase:
     def __init__(
         self,
-        org_id: str = os.environ.get("STURDY_STATS_ORG_ID"),
-        api_key: str = os.environ.get("STURDY_STATS_API_KEY"),
-        base_url: str = os.environ.get("STURDY_STATS_BASE_URL", "https://api.sturdystatistics.com"),
+        org_id: str = None,
+        api_key: str = None,
+        base_url: str = None,
         id: str = None,
     ):
+        """Connection args fall back to environment variables when omitted or None:
+            org_id   ← STURDY_STATS_ORG_ID
+            api_key  ← STURDY_STATS_API_KEY
+            base_url ← STURDY_STATS_BASE_URL  (default https://api.sturdystatistics.com)
+        """
+        org_id = org_id or os.environ.get("STURDY_STATS_ORG_ID")
+        api_key = api_key or os.environ.get("STURDY_STATS_API_KEY")
+        base_url = base_url or os.environ.get("STURDY_STATS_BASE_URL", "https://api.sturdystatistics.com")
         if not org_id:
             raise ValueError("org_id is required (or set STURDY_STATS_ORG_ID)")
         if not api_key:
