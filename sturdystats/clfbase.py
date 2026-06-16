@@ -40,7 +40,7 @@ class ClfBase(SturdyStatsBase):
 
     def status(self):
         """
-        Get clf-base
+        Get clf-base details
         
         Route: GET /classifiers/bases/{clf_base_id}
         """

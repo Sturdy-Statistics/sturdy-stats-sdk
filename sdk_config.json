@@ -5,8 +5,8 @@
       "tag": "datasets",
       "id_param": "dataset_id",
       "id_field": "dataset-id",
-      "wait_poll": "GET /datasets/{dataset_id}/status",
-      "wait_status_field": "current-state",
+      "wait_poll": "GET /datasets/{dataset_id}",
+      "wait_status_field": "status",
       "wait_ready": "ready",
       "wait_failed": ["failed"],
       "methods": [

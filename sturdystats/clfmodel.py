@@ -44,7 +44,7 @@ class ClfModel(SturdyStatsBase):
 
     def status(self):
         """
-        Get clf-model
+        Get clf-model details
         
         Route: GET /classifiers/models/{clf_model_id}
         """
@@ -53,7 +53,7 @@ class ClfModel(SturdyStatsBase):
 
     def predict_one(self, doc):
         """
-        Classify a single document
+        Classify
         
         Route: POST /classifiers/models/{clf_model_id}/predict/one
         

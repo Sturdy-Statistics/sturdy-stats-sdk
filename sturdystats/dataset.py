@@ -40,7 +40,7 @@ class Dataset(SturdyStatsBase):
 
     def status(self):
         """
-        Get dataset
+        Get dataset details
         
         Route: GET /datasets/{dataset_id}
         """
@@ -49,7 +49,7 @@ class Dataset(SturdyStatsBase):
 
     def append(self, filepath: str):
         """
-        Upload parquet chunk
+        Append batch
         
         Route: POST /datasets/{dataset_id}/append
         
@@ -76,14 +76,14 @@ class Dataset(SturdyStatsBase):
 
     def wait(self, poll_interval_start: float = 2.0, poll_interval_max: float = 60.0):
         """Block until entity reaches ready or failed state. Returns self.
-        → GET datasets/{self.id}/status
+        → GET datasets/{self.id}
         """
         import time
         from .base import SturdyStatsSdkError
         interval = poll_interval_start
         while True:
-            _resp = self._get(f"datasets/{self.id}/status")
-            _s = _resp.get('current-state')
+            _resp = self._get(f"datasets/{self.id}")
+            _s = _resp.get('status')
             if _s == 'ready':
                 return self
             if _s in {'failed'}:

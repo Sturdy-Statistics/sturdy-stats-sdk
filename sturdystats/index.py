@@ -12,7 +12,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
     def list(self, transform = None):
         """
         List indices
-
+        
         Route: GET /indices
         """
         _path = f"indices"
@@ -25,17 +25,19 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
     def create(cls, name, dataset_id, private_annotations = False, model_arch = 'aalda-para', burn_in = 5000, sample = 150, n_topics = 192, training_overrides = None, org_id = None, api_key = None, base_url = None):
         """
         Create index and kick off training
-
+        
         Route: POST /indices
-
+        
         Args:
             name — Human-readable name for this index.
             dataset_id — ID of the committed dataset to build the index from. The dataset must be committed before training.
             private_annotations (default: False) — Reserved for future use.
             model_arch (default: 'aalda-para') — Topic model architecture to train:
-   - "aalda-para": paragraph-level topic model, best general-purpose choice
-   - "aalda": document-level topics
-   - "aalda-para-sent": paragraph + sentence level topics
+   - "aalda": document-level topics. This is best for short documents such as tweets, text messsages, or abstracts. This model also provides the fastest training speed.
+   - "aalda-para": paragraph-level topic model. This architecture is best for longer documents with short 'paragraph', such as phone call transcripts with alternating speakers or web content.
+   - "aalda-para-sent": paragraph + sentence level topics: this model is best for long for content with complex content in which a single paragraph may contain several complex ideas, such as financial documents, legal contracts, and earnings transcripts.
+
+  The architecture does not affect the structure of the final output. All models will annotate and organize data into our standard document, paragraph, subparagraph, and sentence semantic units. The architecture simply provides additional structure to guide our models training process. More granular architectures enable flexibility and overdispersion for longer, more complex documents.
             burn_in (default: 5000) — Number of burn-in training iterations before sampling begins. Higher values improve topic quality at the cost of training time.
             sample (default: 150) — Number of posterior samples collected after burn-in. More samples give more stable topic estimates.
             n_topics (default: 192) — Upper bound on the number of topics to discover. Higher values produce finer-grained topics and increase training time linearly.
@@ -59,8 +61,8 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def status(self):
         """
-        Get index
-
+        Get index details
+        
         Route: GET /indices/{index_id}
         """
         _path = f"indices/{self.id}"
@@ -68,10 +70,10 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def topics_search(self, level, filter = None, topic_mention_cutoff = 2.0, search_query = None, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, transform = None):
         """
-        Topic inventory for a filtered set of units
-
+        Topic Search
+        
         Route: POST /indices/{index_id}/topics/search
-
+        
         Args:
             level — Granularity level to operate at. Each level corresponds to a view over the index:
    - "doc": one row per document
@@ -85,7 +87,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
    doc_id and doc columns).
             filter (default: None) — Optional SQL WHERE clause (DuckDB syntax) applied against the entity view at the selected level.
    Available columns at all levels:
-   - doc_id (VARCHAR): document identifier
+   - doc_id: document identifier
    - text (VARCHAR): text content at this granularity
    - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
    - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
@@ -117,10 +119,10 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def topics_diff(self, level, filter1, filter2, topic_mention_cutoff = 2.0, prior_weight = 10.0, confidence_cutoff = 0.95, search_query1 = None, search_query2 = None, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, transform = None):
         """
-        Bayesian topic diff between two filtered sets of units
-
+        Topic Diff
+        
         Route: POST /indices/{index_id}/topics/diff
-
+        
         Args:
             level — Granularity level to operate at. Each level corresponds to a view over the index:
    - "doc": one row per document
@@ -162,10 +164,10 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def search(self, level, search_query = None, filter = None, topic_ids = None, sort_by = 'relevance', topic_mention_cutoff = 2.0, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, limit = 20, transform = None):
         """
-        Ranked unit retrieval with optional semantic search and topic filter
-
+        Search & Retrieval
+        
         Route: POST /indices/{index_id}/docs/search
-
+        
         Args:
             level — Granularity level to operate at. Each level corresponds to a view over the index:
    - "doc": one row per document
@@ -180,7 +182,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
             filter (default: None) — Optional SQL WHERE clause (DuckDB syntax) applied against the entity view at the selected level.
    Available columns at all levels:
-   - doc_id (VARCHAR): document identifier
+   - doc_id: document identifier
    - text (VARCHAR): text content at this granularity
    - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
    - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
@@ -217,23 +219,29 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def sql(self, sql, search_query = None, search_level = None, topic_mention_cutoff = 2.0, semantic_search_cutoff = 0.1, semantic_search_weight = 0.3, transform = None):
         """
-        Run a SQL query against the index
-
+        SQL
+        
         Route: POST /indices/{index_id}/sql
-
+        
         Args:
             sql — SQL SELECT statement (DuckDB syntax) to run against the index. Returns results as a parquet file (application/vnd.apache.parquet).
 
    Available views:
    - doc, paragraph, subparagraph, sentence — entity views at each granularity level.
-     All views expose: doc_id (VARCHAR), text (VARCHAR), topic_count MAP(SMALLINT, FLOAT),
+     All views expose: doc_id, text (VARCHAR), topic_count MAP(SMALLINT, FLOAT),
      topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
      plus all metadata columns from the original dataset (beyond the required doc_id/doc columns).
      Finer levels add: paragraph_idx (USMALLINT), subparagraph_idx (USMALLINT), sentence_idx (USMALLINT).
    - topics — global topic reference table: id (SMALLINT), group_id (SMALLINT),
      label (VARCHAR), group_label (VARCHAR), c (BIGINT total count)
 
-   Multi-statement SQL (semicolons mid-query) is rejected; use CTEs instead. Trailing semicolons are stripped.
+   The query must be in the form of a single SELECT statement. CTEs are allowed. For descriptive queries such as DESCRIBE TABLE or or SHOW ALL TABLES must be wrapped eg SELECT * FROM (DESCRIBE TABLE doc) statement.
+
+  There are also several lower level views which can be helpful for more advanced queries, such as tokens_with_topics, doc_meta, doc_topics, paragraph_topics, subparagraph_topics, and sentence_topics.
+
+  When a search query is provided, the doc, paragraph, subparagraph, and sentence tables are filtered by the most restrictrive possible criteria. E.g. if the search_level is 'doc', each table is filtered to only include doc_ids that pass the semantic search filter. If the search level is sentence, paragraphs are filtered to only paragraph that contain sentences that pass the semantic search filter. The resulting tables are unordered.
+
+  We expose the underlying search scores in a 'search_scores' table that contains the topic_search_score, exact_match_score, and the combined search_score. We expose the processed search_query under the database namespace `search_query.main`. This database namespace contains all the same tables are the main namespace, scoped only to the provided search query. This underlying data provides a powerful set of options for advanced retrieval use-cases.
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
             search_level (default: None) — Granularity level to use for search setup when search-query is provided. Required if search-query is set.
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.

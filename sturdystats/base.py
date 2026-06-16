@@ -89,14 +89,14 @@ class SturdyStatsBase:
     def _wait_for_dataset(self, dataset_id: str, poll_interval_start: float = 2.0,
                           poll_interval_max: float = 15.0, timeout: float = 1800.0):
         """Block until dataset current-state is ready or failed.
-        → GET /datasets/{dataset-id}/status
+        → GET /datasets/{dataset-id}
         """
         import time
         deadline = time.time() + timeout
         interval = poll_interval_start
         while time.time() < deadline:
-            data = self._get(f"datasets/{dataset_id}/status")
-            state = data.get("current-state")
+            data = self._get(f"datasets/{dataset_id}")
+            state = data.get("status")
             if state == "ready":
                 return data
             if state == "failed":
