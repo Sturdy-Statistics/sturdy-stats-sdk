@@ -19,7 +19,11 @@ ClfBaseStatusResponse = TypedDict("ClfBaseStatusResponse", {
 
 
 class ClfBase(SturdyStatsBase):
-    """Classification is a two-stage process. First, pretrain a **clf-base** — a topic-aware base model trained over a committed dataset. Pretraining is computationally expensive and runs asynchronously. Once the clf-base is `ready`, train one or more **clf-models** on top of it: each clf-model learns to predict a set of label columns present in the training dataset. clf-models are designed for scalability and high-throughput inference, and require a minimum of 32 labeled examples per class. For few-shot or exploratory classification with less data, training a classifier via the index is more robust."""
+    """Classification is a two-stage process:
+1. Pretrain a **clf-base** — a topic-aware base model trained over a committed dataset. Pretraining is computationally expensive and runs asynchronously.
+2. Once the clf-base is `ready`, train one or more **clf-models** on top of it. Each clf-model learns to predict a set of label columns present in the training dataset.
+
+clf-models are designed for scalability and high-throughput inference, and require a minimum of 32 labeled examples per class. For few-shot or exploratory classification with less data, training a classifier via the index is more robust."""
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
@@ -32,7 +36,10 @@ class ClfBase(SturdyStatsBase):
                 id (str): Clf-base identifier (m-<uuid>).
                 name (str): Human-readable name.
                 dataset (str): ID of the committed dataset this clf-base was pretrained on.
-                status (str): Lifecycle status of the clf-base. Values: initializing (pretraining in progress), ready (available to build classifiers on), failed.
+                status (str): Lifecycle status of the clf-base:
+                    - initializing — pretraining in progress
+                    - ready — available to build classifiers on
+                    - failed
                 created-at (Optional[str]): When pretraining was requested.
                 ready-at (Optional[str]): When the clf-base became ready. Null if not yet complete.
         """
@@ -45,7 +52,7 @@ class ClfBase(SturdyStatsBase):
     @classmethod
     def create(cls, dataset_id: str, model_name: str, org_id = None, api_key = None, base_url = None) -> "ClfBase":
         """
-        Kick off pretraining of a topic-aware base model over a committed dataset. Pretraining runs asynchronously — poll /jobs/:id until status is ready. The clf-base must be ready before any clf-model can be trained on top of it.
+        Kick off pretraining of a topic-aware base model over a committed dataset. Pretraining runs asynchronously — poll /jobs/:id until status is succeeded. The clf-base must be ready before any clf-model can be trained on top of it.
         
         Route: POST /classifiers/bases
         
@@ -77,7 +84,10 @@ class ClfBase(SturdyStatsBase):
                 id (str): Clf-base identifier (m-<uuid>).
                 name (str): Human-readable name.
                 dataset (str): ID of the committed dataset this clf-base was pretrained on.
-                status (str): Lifecycle status of the clf-base. Values: initializing (pretraining in progress), ready (available to build classifiers on), failed.
+                status (str): Lifecycle status of the clf-base:
+                    - initializing — pretraining in progress
+                    - ready — available to build classifiers on
+                    - failed
                 created-at (Optional[str]): When pretraining was requested.
                 ready-at (Optional[str]): When the clf-base became ready. Null if not yet complete.
                 details (Optional[Any]): Job progress and metrics while training. Present on get, absent on list.

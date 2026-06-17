@@ -29,7 +29,14 @@ class Index(SturdyStatsBase):
 
 Because topic annotations are stored as structured columns alongside any metadata you upload, you can jointly analyze thematic content and outcome metrics — surfacing which topics drive ratings, conversions, revenue, or any other signal you care about. This makes it possible not just to describe what your data is about, but to explain why metrics move.
 
-Once `ready`, the index exposes four query endpoints that compose naturally: `topics/search` returns the topic inventory for a filtered unit set with mention counts and prevalence — use this to discover which topics exist and get their IDs; `topics/diff` uses a Bayesian comparison to identify topics significantly more prevalent in one segment versus another; `docs/search` retrieves and ranks units using a blend of exact match and semantic search, topic filters, and SQL filters; and `sql` runs arbitrary DuckDB SQL against the entity views directly. All endpoints operate at a configurable granularity level (`doc`, `paragraph`, or `sentence`), and all user-uploaded metadata columns are available as filter targets at every level."""
+Once `ready`, the index exposes five query endpoints that compose naturally:
+- `topics/search` — topic inventory for a filtered unit set, with mention counts and prevalence. Use it to discover which topics exist and get their IDs.
+- `topics/diff` — Bayesian comparison identifying topics significantly more prevalent in one segment than another.
+- `topics/metric` — compares a per-document metric across topics between two segments, to surface which topics drive that metric.
+- `docs/search` — retrieves and ranks units by a blend of exact-match + semantic search, topic filters, and SQL filters.
+- `sql` — arbitrary DuckDB SQL against the entity views directly.
+
+All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `subparagraph`, or `sentence`), and all user-uploaded metadata columns are filter targets at every level. The endpoints share the same underlying views, so they are fully compatible: the same filters and search queries behave identically everywhere, and any high-level result can be unrolled to the underlying passages — the exact text behind any topic, segment, or metric is always retrievable via `docs/search` or `sql`."""
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
@@ -42,7 +49,10 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
                 id (str): Index identifier (ix-<uuid>).
                 name (str): Human-readable name.
                 dataset (str): ID of the dataset this index was built from.
-                status (str): Lifecycle status. Values: initializing (training in progress), ready (available to query), failed.
+                status (str): Lifecycle status:
+                    - initializing — training in progress
+                    - ready — available to query
+                    - failed
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the index became ready. Null if not yet complete.
         """
@@ -55,7 +65,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
     @classmethod
     def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
-        Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `ready`. The index must be ready before any query endpoints can be used.
+        Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `succeeded`. The index must be ready before any query endpoints can be used.
         
         Route: POST /indices
         
@@ -66,7 +76,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
             model_arch (default: 'aalda-para') — Topic model architecture to train:
                 - "aalda": document-level topics. This is best for short documents such as tweets, text messsages, or abstracts. This model also provides the fastest training speed.
                 - "aalda-para": paragraph-level topic model. This architecture is best for longer documents with short 'paragraph', such as phone call transcripts with alternating speakers or web content.
-                - "aalda-para-sent": paragraph + sentence level topics: this model is best for long for content with complex content in which a single paragraph may contain several complex ideas, such as financial documents, legal contracts, and earnings transcripts.
+                - "aalda-para-sent": paragraph + sentence level topics: this model is best for long content with complex content in which a single paragraph may contain several complex ideas, such as financial documents, legal contracts, and earnings transcripts.
 
                 The architecture does not affect the structure of the final output. All models will annotate and organize data into our standard document, paragraph, subparagraph, and sentence semantic units. The architecture simply provides additional structure to guide our models training process. More granular architectures enable flexibility and overdispersion for longer, more complex documents.
             burn_in (default: 5000) — Number of burn-in training iterations before sampling begins. Higher values improve topic quality at the cost of training time.
@@ -95,7 +105,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def append(self, dataset_id: str) -> IndexAppendResponse:
         """
-        Kick off prediction of a committed dataset against an existing index. Runs asynchronously — poll `/jobs/:id` until status is `ready`.
+        Kick off prediction of a committed dataset against an existing index. Runs asynchronously — poll `/jobs/:id` until status is `succeeded`.
         
         Route: POST /indices/{index_id}/append
         
@@ -125,7 +135,10 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
                 id (str): Index identifier (ix-<uuid>).
                 name (str): Human-readable name.
                 dataset (str): ID of the dataset this index was built from.
-                status (str): Lifecycle status. Values: initializing (training in progress), ready (available to query), failed.
+                status (str): Lifecycle status:
+                    - initializing — training in progress
+                    - ready — available to query
+                    - failed
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the index became ready. Null if not yet complete.
                 details (Optional[Any]): Job progress and metrics while training. Present on get, absent on list.
@@ -135,7 +148,19 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
 
     def topics_search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], filter: Optional[str] = None, topic_mention_cutoff: float = 2.0, search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
         """
-        Returns a high level rollup of the topics present in ny filtered subset of the index. The response provides the raw number of times that topic occurs (mentions) and the percentage of the filtered corpus in which that topics occurss (prevalence). The level parameter dicates at what level the metrics are measures. For example, if the level is set to 'doc', 13 mentions means that the topic occurred in 13 documents. If the level is set to 'paragraph', 25 mentions means the topic occurred in 25 paragraphs. If a topic occurs in 25 out of 50 paragraphs, its prevalance is 50%.
+        Returns a high-level rollup of the topics present in any filtered subset of the index. Reports `mentions` (raw count of units containing the topic) and `prevalence` (fraction of the subset containing it). The `level` parameter sets the unit of measurement: at `level: "doc"`, 13 mentions means the topic occurred in 13 documents; at `level: "paragraph"`, 13 mentions means 13 paragraphs. A topic in 25 of 50 paragraphs has prevalence 0.5.
+
+Use cases:
+- Discover the topic inventory: run with no filter to see every topic the model found.
+- Scope to a segment: `filter: "brand_name = 'Bosch'"` for what Bosch reviewers discuss.
+- Combine with search: add `search-query` to roll up topics over just the semantically-relevant slice.
+
+Example — topics in verified Bosch reviews mentioning noise:
+```json
+{"level": "doc",
+ "filter": "brand_name = 'Bosch' AND verified_purchase = true",
+ "search-query": "noise level during cycle"}
+```
         
         Route: POST /indices/{index_id}/topics/search
         
@@ -165,7 +190,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
                 Example: "rating > 4 AND is_verified = true"
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
-            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         
         Returns:
@@ -190,9 +215,21 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
         _df = pd.DataFrame(_resp['topics'])
         return transform(_df) if transform else _df
 
-    def topics_diff(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], filter1: str, filter2: str, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, confidence_cutoff: float = 0.95, search_query1: Optional[str] = None, search_query2: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
+    def topics_diff(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], test_subset: str, control_subset: str, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, confidence_cutoff: float = 0.95, test_search_query: Optional[str] = None, control_search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
         """
-        Compares topic prevalence between two unit sets defined by SQL filters and returns topics that are significantly more prevalent in the first set. This endpoint is helpful to extract topics that occur more frequently in one group than another, via empirical Bayes beta-binomial statistics — `confidence` is the posterior probability that topic prevalence in filter1 exceeds filter2. Only topics above `confidence-cutoff` are returned, ordered by confidence descending. This endpoint is extremely useful for outlier detection or semantic comparisons of distinct groups.
+        Compares topic prevalence between a test subset and a control subset (each a SQL filter) and returns topics significantly more prevalent in the test subset, via empirical Bayes beta-binomial statistics. `confidence` is the posterior probability that the topic's prevalence in the test subset exceeds the control subset; only topics above `confidence-cutoff` are returned, ordered by confidence descending. The two subsets are independent filters — to nest the test subset within the control subset, repeat the control's conditions in the test filter.
+
+Use cases:
+- Compare brands: `test-subset: "brand_name = 'Bosch'"` vs `control-subset: "brand_name = 'Miele'"` — what Bosch reviewers raise that Miele's don't.
+- Compare within a brand: `test-subset: "brand_name = 'Bosch' AND product_name = 'Bosch 800 Series'"` vs `control-subset: "brand_name = 'Bosch'"` — what's distinctive about the 800 within the Bosch lineup.
+- Outlier detection: low vs high ratings — `test-subset: "rating <= 2"` vs `control-subset: "rating >= 4"`.
+
+Example — topics that distinguish 1–2 star Bosch reviews from 4–5 star Bosch reviews:
+```json
+{"level": "doc",
+ "test-subset": "brand_name = 'Bosch' AND rating <= 2",
+ "control-subset": "brand_name = 'Bosch' AND rating >= 4"}
+```
         
         Route: POST /indices/{index_id}/topics/diff
         
@@ -207,14 +244,36 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
                 topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
                 and all metadata columns from the original dataset (everything beyond the required
                 doc_id and doc columns).
-            filter1 — SQL WHERE clause defining the first (target) unit set. See filter description for available columns.
-            filter2 — SQL WHERE clause defining the second (reference) unit set to compare against.
+            test_subset — SQL WHERE clause defining the test subset — the group of interest checked for elevated topic prevalence.
+                Available columns at all levels:
+                - doc_id: document identifier
+                - text (VARCHAR): text content at this granularity
+                - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
+                - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
+                - semantic_topic_count (MAP(VARCHAR, FLOAT)): topic weight keyed by topic label string
+                - All metadata columns from the original dataset (the columns you uploaded beyond doc_id/doc)
+                Additional columns by level:
+                - paragraph and above: paragraph_idx (USMALLINT)
+                - subparagraph and above: subparagraph_idx (USMALLINT)
+                - sentence: sentence_idx (USMALLINT)
+            control_subset — SQL WHERE clause defining the control subset — the baseline the test subset's topic prevalence is compared against.
+                Available columns at all levels:
+                - doc_id: document identifier
+                - text (VARCHAR): text content at this granularity
+                - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
+                - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
+                - semantic_topic_count (MAP(VARCHAR, FLOAT)): topic weight keyed by topic label string
+                - All metadata columns from the original dataset (the columns you uploaded beyond doc_id/doc)
+                Additional columns by level:
+                - paragraph and above: paragraph_idx (USMALLINT)
+                - subparagraph and above: subparagraph_idx (USMALLINT)
+                - sentence: sentence_idx (USMALLINT)
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
             prior_weight (default: 10.0) — Strength of the empirical Bayes prior when comparing topic prevalences. Higher values shrink estimates toward the global baseline, suppressing noise on low-mention topics.
-            confidence_cutoff (default: 0.95) — Minimum posterior probability that topic prevalence in filter1 exceeds filter2 for a topic to be included in results.
-            search_query1 (default: None) — Search query to further scope the first unit set semantically.
-            search_query2 (default: None) — Search query to further scope the second unit set semantically.
-            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            confidence_cutoff (default: 0.95) — Minimum posterior probability that topic prevalence in the test subset exceeds the control subset for a topic to be included in results.
+            test_search_query (default: None) — Search query to further scope the test subset semantically.
+            control_search_query (default: None) — Search query to further scope the control subset semantically.
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         
         Returns:
@@ -222,24 +281,125 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
                 id (int): Integer topic ID.
                 label (str): Short descriptive label for the topic.
                 group_label (str): Broader group label that this topic belongs to.
-                confidence (float): Posterior probability (0–1) that this topic is more prevalent in filter1 than filter2. Only topics above confidence-cutoff are returned.
-                prevalence_ratio (float): Ratio of filter1 prevalence to filter2 prevalence.
-                mentions (int): Number of units in filter1 that mention this topic.
-                reference_mentions (int): Number of units in filter2 that mention this topic.
-                prevalence (float): Fraction of filter1 units mentioning this topic.
-                reference_prevalence (float): Fraction of filter2 units mentioning this topic.
+                confidence (float): Posterior probability (0–1) that this topic is more prevalent in the test subset than the control subset. Only topics above confidence-cutoff are returned.
+                prevalence_ratio (float): Ratio of test-subset prevalence to control-subset prevalence.
+                test_mentions (int): Number of units in the test subset that mention this topic.
+                control_mentions (int): Number of units in the control subset that mention this topic.
+                test_prevalence (float): Fraction of test-subset units mentioning this topic.
+                control_prevalence (float): Fraction of control-subset units mentioning this topic.
                 global_prevalence (float): Fraction of all units in the index mentioning this topic. Used as the empirical Bayes prior.
         """
         _path = f"indices/{self.id}/topics/diff"
         _body = {k: v for k, v in {
             'level': level,
-            'filter1': filter1,
-            'filter2': filter2,
+            'test-subset': test_subset,
+            'control-subset': control_subset,
             'topic-mention-cutoff': topic_mention_cutoff,
             'prior-weight': prior_weight,
             'confidence-cutoff': confidence_cutoff,
-            'search-query1': search_query1,
-            'search-query2': search_query2,
+            'test-search-query': test_search_query,
+            'control-search-query': control_search_query,
+            'semantic-search-cutoff': semantic_search_cutoff,
+            'semantic-search-weight': semantic_search_weight,
+        }.items() if v is not None}
+        _resp = self._post(_path, _body)
+        import pandas as pd
+        _df = pd.DataFrame(_resp['topics'])
+        return transform(_df) if transform else _df
+
+    def topics_metric(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], test_metric: str, test_subset: Optional[str] = None, control_subset: Optional[str] = None, search_query: Optional[str] = None, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
+        """
+        Compares a per-document metric across topics between two independent subsets of the index. For each topic, returns the metric averaged over the documents that mention it — denoised toward the control and whole-index baselines — so you can see which topics co-occur with higher or lower metric values.
+
+Use cases:
+- Explain a metric: `test-metric: "rating"` to see which topics co-occur with higher or lower star ratings.
+- Compare a rate: `test-metric: "returned"` (booleans average as 0/1) to see which topics co-occur with higher return rates.
+- Within a brand: `test-metric: "rating"`, `test-subset: "product_name = 'Bosch 800 Series'"` vs `control-subset: "brand_name = 'Bosch'"` — how the 800's per-topic ratings compare to the Bosch baseline.
+
+Example — which topics are associated with lower ratings for Whirlpool:
+```json
+{"level": "doc",
+ "test-metric": "rating",
+ "test-subset": "brand_name = 'Whirlpool'"}
+```
+        
+        Route: POST /indices/{index_id}/topics/metric
+        
+        Args:
+            level — Granularity level to operate at. Each level corresponds to a view over the index:
+                - "doc": one row per document
+                - "paragraph": one row per paragraph (adds paragraph_idx)
+                - "subparagraph": one row per subparagraph (adds paragraph_idx, subparagraph_idx)
+                - "sentence": one row per sentence (adds paragraph_idx, subparagraph_idx, sentence_idx)
+
+                All levels expose: doc_id, text, topic_count MAP(SMALLINT, FLOAT),
+                topic_prevalence MAP(SMALLINT, DOUBLE), semantic_topic_count MAP(VARCHAR, FLOAT),
+                and all metadata columns from the original dataset (everything beyond the required
+                doc_id and doc columns).
+            test_metric — SQL scalar expression over document-level metadata (DuckDB syntax), averaged over the
+                distinct documents that mention each topic. Cast to DOUBLE automatically, so boolean
+                rates work directly. Examples: "csat", "csat - 3", "refunded", "conversion = true".
+                Must be a per-document value — only averaging is supported, not arbitrary aggregations.
+                Documents where this expression is NULL are excluded from the whole analysis.
+            test_subset (default: None) — Optional SQL WHERE clause (DuckDB syntax) defining the test subset — the group of interest whose per-topic metric you want to characterize. Defaults to the whole index, which yields index-wide per-topic metrics. May overlap or be disjoint from the control subset; the two are independent filters.
+                Available columns at all levels:
+                - doc_id: document identifier
+                - text (VARCHAR): text content at this granularity
+                - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
+                - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
+                - semantic_topic_count (MAP(VARCHAR, FLOAT)): topic weight keyed by topic label string
+                - All metadata columns from the original dataset (the columns you uploaded beyond doc_id/doc)
+                Additional columns by level:
+                - paragraph and above: paragraph_idx (USMALLINT)
+                - subparagraph and above: subparagraph_idx (USMALLINT)
+                - sentence: sentence_idx (USMALLINT)
+            control_subset (default: None) — Optional SQL WHERE clause (DuckDB syntax) defining the control subset — the baseline the test subset is compared against. Defaults to the whole index. Independent of the test subset (may overlap or be disjoint).
+                Available columns at all levels:
+                - doc_id: document identifier
+                - text (VARCHAR): text content at this granularity
+                - topic_count (MAP(SMALLINT, FLOAT)): raw topic weight per topic_id
+                - topic_prevalence (MAP(SMALLINT, DOUBLE)): topic weight normalised over all topics in this unit
+                - semantic_topic_count (MAP(VARCHAR, FLOAT)): topic weight keyed by topic label string
+                - All metadata columns from the original dataset (the columns you uploaded beyond doc_id/doc)
+                Additional columns by level:
+                - paragraph and above: paragraph_idx (USMALLINT)
+                - subparagraph and above: subparagraph_idx (USMALLINT)
+                - sentence: sentence_idx (USMALLINT)
+            search_query (default: None) — Optional natural language query that semantically scopes the whole analysis before SQL
+                filtering. Applied to both the test and control subsets (an overall universe filter), so
+                test and control are each intersected with the searched set. Activates the same blended
+                keyword + semantic search as search-query.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            prior_weight (default: 10.0) — Strength of the empirical Bayes prior used to denoise the test subset's per-topic values.
+                Test estimates shrink toward the control subset's per-topic estimates, which in turn shrink
+                toward the whole-index per-topic baseline, each weighted by this many pseudo-observations.
+                Higher values suppress noise on low-mention topics; 0 returns (very nearly) raw averages.
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
+            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+        
+        Returns:
+            pandas.DataFrame with columns:
+                id (int): Integer topic ID.
+                label (str): Short descriptive label for the topic.
+                group_label (str): Broader group label that this topic belongs to.
+                test_mentions_topic (int): Number of level-units in the test subset that mention this topic (above topic-mention-cutoff).
+                control_mentions_topic (int): Number of level-units in the control subset that mention this topic (above topic-mention-cutoff). 0 if the topic is absent from the control subset.
+                test_metric_topic (float): Denoised average of test-metric over distinct test-subset documents that mention this topic. Shrunk toward control_metric_topic by prior-weight.
+                control_metric_topic (float): Denoised average of test-metric over distinct control-subset documents that mention this topic. Shrunk toward the whole-index per-topic average by prior-weight; the baseline test_metric_topic is compared against.
+                test_metric_global (float): Average of test-metric over all distinct documents in the test subset (topic-agnostic).
+                control_metric_global (float): Average of test-metric over all distinct documents in the control subset (topic-agnostic).
+                test_prevalence_topic (float): Denoised fraction of test-subset level-units that mention this topic. Shrunk toward control_prevalence_topic by prior-weight.
+                control_prevalence_topic (float): Denoised fraction of control-subset level-units that mention this topic. Shrunk toward the whole-index prevalence of this topic by prior-weight.
+        """
+        _path = f"indices/{self.id}/topics/metric"
+        _body = {k: v for k, v in {
+            'level': level,
+            'test-metric': test_metric,
+            'test-subset': test_subset,
+            'control-subset': control_subset,
+            'search-query': search_query,
+            'topic-mention-cutoff': topic_mention_cutoff,
+            'prior-weight': prior_weight,
             'semantic-search-cutoff': semantic_search_cutoff,
             'semantic-search-weight': semantic_search_weight,
         }.items() if v is not None}
@@ -251,6 +411,20 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
     def search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], search_query: Optional[str] = None, filter: Optional[str] = None, topic_ids: Optional[list] = None, sort_by: str = 'relevance', topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, limit: int = 20, transform = None) -> "pd.DataFrame":
         """
         Retrieve and rank units from the index at a given granularity level. Supports three independent signals that can be combined freely: a natural language search query (keyword + semantic), a list of topic IDs to filter and score by, and a SQL filter against any column in the entity view. Results include per-unit scores and aggregated topic info.
+
+Use cases:
+- Semantic retrieval: `search-query: "leaking from the door seal"` to find the actual complaints.
+- Topic + segment drill-down: `topic-ids` from topics/search plus `filter: "brand_name = 'LG'"`.
+- Pure SQL ranking: omit search and topics, and use `filter` with `sort-by`.
+
+Example — LG paragraphs about door-seal leaks that mention topic 42:
+```json
+{"level": "paragraph",
+ "search-query": "leaking from the door seal",
+ "topic-ids": [42],
+ "filter": "brand_name = 'LG'",
+ "limit": 20}
+```
         
         Route: POST /indices/{index_id}/docs/search
         
@@ -282,7 +456,7 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
             topic_ids (default: None) — Filter results to units that mention these topic IDs (integer IDs from the topics/search endpoint). Units are ranked by their combined score for these topics.
             sort_by (default: 'relevance') — SQL expression for ORDER BY DESC. The special value "relevance" auto-selects: search_score * topic_score (both), search_score (search only), topic_score (topics only), doc_id (neither).
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
-            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
             limit (default: 20) — Maximum number of results to return.
         
@@ -331,17 +505,17 @@ Once `ready`, the index exposes four query endpoints that compose naturally: `to
                 - topics — global topic reference table: id (SMALLINT), group_id (SMALLINT),
                 label (VARCHAR), group_label (VARCHAR), c (BIGINT total count)
 
-                The query must be in the form of a single SELECT statement. CTEs are allowed. For descriptive queries such as DESCRIBE TABLE or or SHOW ALL TABLES must be wrapped eg SELECT * FROM (DESCRIBE TABLE doc) statement.
+                The query must be in the form of a single SELECT statement. CTEs are allowed. For descriptive queries such as DESCRIBE TABLE or SHOW ALL TABLES must be wrapped eg SELECT * FROM (DESCRIBE TABLE doc) statement.
 
                 There are also several lower level views which can be helpful for more advanced queries, such as tokens_with_topics, doc_meta, doc_topics, paragraph_topics, subparagraph_topics, and sentence_topics.
 
-                When a search query is provided, the doc, paragraph, subparagraph, and sentence tables are filtered by the most restrictrive possible criteria. E.g. if the search_level is 'doc', each table is filtered to only include doc_ids that pass the semantic search filter. If the search level is sentence, paragraphs are filtered to only paragraph that contain sentences that pass the semantic search filter. The resulting tables are unordered.
+                When a search query is provided, the doc, paragraph, subparagraph, and sentence tables are filtered by the most restrictive possible criteria. E.g. if the search_level is 'doc', each table is filtered to only include doc_ids that pass the semantic search filter. If the search level is sentence, paragraphs are filtered to only paragraph that contain sentences that pass the semantic search filter. The resulting tables are unordered.
 
-                We expose the underlying search scores in a 'search_scores' table that contains the topic_search_score, exact_match_score, and the combined search_score. We expose the processed search_query under the database namespace `search_query.main`. This database namespace contains all the same tables are the main namespace, scoped only to the provided search query. This underlying data provides a powerful set of options for advanced retrieval use-cases.
+                We expose the underlying search scores in a 'search_scores' table that contains the topic_search_score, exact_match_score, and the combined search_score. We expose the processed search_query under the database namespace `search_query.main`. This database namespace contains all the same tables as the main namespace, scoped only to the provided search query. This underlying data provides a powerful set of options for advanced retrieval use-cases.
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
             search_level (default: None) — Granularity level to use for search setup when search-query is provided. Required if search-query is set.
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
-            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Approximately 0–1 (Hellinger distance scale).
+            semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         
         Returns:

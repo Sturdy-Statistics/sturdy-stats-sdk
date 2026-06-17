@@ -72,6 +72,11 @@
           "response_key": ["topics"]
         },
         {
+          "name": "topics_metric",
+          "route": "POST /indices/{index_id}/topics/metric",
+          "response_key": ["topics"]
+        },
+        {
           "name": "search",
           "route": "POST /indices/{index_id}/docs/search",
           "response_key": ["results"]

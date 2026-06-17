@@ -25,7 +25,11 @@ ClfModelPredictOneResponse = TypedDict("ClfModelPredictOneResponse", {
 
 
 class ClfModel(SturdyStatsBase):
-    """Classification is a two-stage process. First, pretrain a **clf-base** — a topic-aware base model trained over a committed dataset. Pretraining is computationally expensive and runs asynchronously. Once the clf-base is `ready`, train one or more **clf-models** on top of it: each clf-model learns to predict a set of label columns present in the training dataset. clf-models are designed for scalability and high-throughput inference, and require a minimum of 32 labeled examples per class. For few-shot or exploratory classification with less data, training a classifier via the index is more robust."""
+    """Classification is a two-stage process:
+1. Pretrain a **clf-base** — a topic-aware base model trained over a committed dataset. Pretraining is computationally expensive and runs asynchronously.
+2. Once the clf-base is `ready`, train one or more **clf-models** on top of it. Each clf-model learns to predict a set of label columns present in the training dataset.
+
+clf-models are designed for scalability and high-throughput inference, and require a minimum of 32 labeled examples per class. For few-shot or exploratory classification with less data, training a classifier via the index is more robust."""
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
@@ -40,7 +44,10 @@ class ClfModel(SturdyStatsBase):
                 clf-base (str): ID of the clf-base this model was fine-tuned from.
                 dataset (str): ID of the dataset used for training.
                 fields (list): The label column names from the training dataset that this classifier was trained to predict.
-                status (str): Lifecycle status of the clf-model. Values: initializing (training in progress), ready (available for inference), failed.
+                status (str): Lifecycle status of the clf-model:
+                    - initializing — training in progress
+                    - ready — available for inference
+                    - failed
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the clf-model became ready. Null if not yet complete.
         """
@@ -53,7 +60,7 @@ class ClfModel(SturdyStatsBase):
     @classmethod
     def create(cls, clf_base_id: str, dataset_id: str, model_name: str, fields: list, org_id = None, api_key = None, base_url = None) -> "ClfModel":
         """
-        Fine-tune a classifier on top of a ready clf-base using a committed dataset. Training runs asynchronously — poll /jobs/:id until status is ready. The clf-base must be ready, and the dataset must be committed. The fields specified must be column names present in the training dataset.
+        Fine-tune a classifier on top of a ready clf-base using a committed dataset. Training runs asynchronously — poll /jobs/:id until status is succeeded. The clf-base must be ready, and the dataset must be committed. The fields specified must be column names present in the training dataset.
         
         Route: POST /classifiers/models
         
@@ -91,7 +98,10 @@ class ClfModel(SturdyStatsBase):
                 clf-base (str): ID of the clf-base this model was fine-tuned from.
                 dataset (str): ID of the dataset used for training.
                 fields (list): The label column names from the training dataset that this classifier was trained to predict.
-                status (str): Lifecycle status of the clf-model. Values: initializing (training in progress), ready (available for inference), failed.
+                status (str): Lifecycle status of the clf-model:
+                    - initializing — training in progress
+                    - ready — available for inference
+                    - failed
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the clf-model became ready. Null if not yet complete.
                 details (Optional[Any]): Job progress and metrics while training. Present on get, absent on list.

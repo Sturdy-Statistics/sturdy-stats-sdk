@@ -25,7 +25,7 @@ DatasetCommitResponse = TypedDict("DatasetCommitResponse", {
 
 
 class Dataset(SturdyStatsBase):
-    """Datasets are the interface between user data and the system. Upload data as parquet chunks for large datasets or individual rows for one-off appends — each record requires a `doc_id` (VARCHAR) and `doc` (VARCHAR) column; additional columns become queryable metadata. Once committed, a dataset is sealed into an immutable artifact that can be used to train a clf-base, clf-model, or index. Committed datasets cannot be modified."""
+    """Datasets are the interface between user data and the system. Upload data as parquet chunks for large datasets or individual rows for one-off appends — each record requires a `doc_id` and `doc` (VARCHAR) column; additional columns become queryable metadata. Once committed, a dataset is sealed into an immutable artifact that can be used to train a clf-base, clf-model, or index. Committed datasets cannot be modified."""
 
     def list(self, transform = None) -> "pd.DataFrame":
         """
@@ -48,7 +48,7 @@ class Dataset(SturdyStatsBase):
     @classmethod
     def create(cls, name: str, metadata_json: Any = None, org_id = None, api_key = None, base_url = None) -> "Dataset":
         """
-        Create a new empty dataset. After creation, upload parquet chunks via the append endpoint, then call commit to finalise. The uploaded parquet files must contain at least a `doc_id` (VARCHAR) and `doc` (VARCHAR, non-empty) column; all other columns are preserved as queryable metadata.
+        Create a new empty dataset. After creation, upload parquet chunks via the append endpoint, then call commit to finalise. The uploaded parquet files must contain at least a `doc_id` and `doc` (VARCHAR, non-empty) column; all other columns are preserved as queryable metadata.
         
         Route: POST /datasets
         
@@ -80,7 +80,11 @@ class Dataset(SturdyStatsBase):
                 id (str): Dataset identifier (d-<uuid>).
                 name (str): Human-readable name for this dataset.
                 committed (bool): True if the dataset has been committed (finalized) and is ready for model training. False if still accepting uploads.
-                status (Literal['open', 'finalizing', 'ready', 'failed']): Upload lifecycle state of the dataset. Values: open (accepting uploads), finalizing (commit triggered; draining in-flight uploads and compacting), ready (committed successfully), failed.
+                status (Literal['open', 'finalizing', 'ready', 'failed']): Upload lifecycle state of the dataset:
+                    - open — accepting uploads
+                    - finalizing — commit triggered; draining in-flight uploads and compacting
+                    - ready — committed successfully
+                    - failed
                 size (Optional[int]): Total bytes across all uploaded chunks.
                 num-uploads (Optional[int]): Number of parquet chunks uploaded.
                 created-at (Optional[str]): When the dataset was created.

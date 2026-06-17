@@ -16,7 +16,7 @@ def load_openapi():
     if not OPENAPI_PATH.exists():
         print("openapi.json not found, fetching from server...")
         import urllib.request
-        with urllib.request.urlopen("http://localhost:3333/openapi.json") as r:
+        with urllib.request.urlopen("http://api.sturdystatistics.com/openapi.json") as r:
             data = r.read()
         OPENAPI_PATH.write_bytes(data)
         print(f"  saved to {OPENAPI_PATH}")
