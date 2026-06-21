@@ -94,7 +94,11 @@ class SturdyStatsBase:
         resp = self._session.post(self._url(path), json=body or {})
         self._raise(resp)
         arrow_table = pq.read_table(io.BytesIO(resp.content))
-        df = duckdb.from_arrow(arrow_table).df()
+        con = duckdb.connect()
+        try:
+            df = con.from_arrow(arrow_table).df()
+        finally:
+            con.close()
         if transform is not None:
             df = transform(df)
         return df
