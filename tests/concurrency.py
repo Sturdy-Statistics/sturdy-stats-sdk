@@ -37,8 +37,7 @@ def run_query(i):
     t0 = time.perf_counter()
     try:
         df = idx.sql(sql="SELECT * FROM doc LIMIT 10",
-                     search_query="unread messages are so annoying",
-                     search_level="doc")
+                     )
         return (i, "ok", len(df), time.perf_counter() - t0)
     except Exception as e:
         return (i, f"err: {e}", 0, time.perf_counter() - t0)

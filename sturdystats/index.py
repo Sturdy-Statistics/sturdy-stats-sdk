@@ -63,7 +63,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         return transform(_df) if transform else _df
 
     @classmethod
-    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
+    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[str] = None, classification_fields: list = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
         Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `succeeded`. The index must be ready before any query endpoints can be used.
         
@@ -82,6 +82,14 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             burn_in (default: 5000) — Number of burn-in training iterations before sampling begins. Higher values improve topic quality at the cost of training time.
             sample (default: 150) — Number of posterior samples collected after burn-in. More samples give more stable topic estimates.
             n_topics (default: 192) — Upper bound on the number of topics to discover. Higher values produce finer-grained topics and increase training time linearly.
+            paragraph_delimiter (default: 'double-newline') — How documents are split into paragraphs before tokenizing:
+                - "double-newline": split on blank lines (one or more empty lines). This is the default and works well for prose.
+                - "single-newline": split on every line break. Best when each line is its own unit, such as chat logs or line-delimited records.
+                - "custom": split on the regular expression supplied in `paragraph-delimiter-regex`.
+
+                This choice is frozen onto the index at train time and reused for every append, so all data in an index is segmented consistently.
+            paragraph_delimiter_regex (default: None) — Custom paragraph-splitting regular expression. Required when `paragraph-delimiter` is "custom", and must be omitted otherwise.
+            classification_fields (default: [])
             training_overrides (default: None) — Advanced training overrides. Leave nil unless instructed.
         
         Returns:
@@ -96,6 +104,9 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             'burn-in': burn_in,
             'sample': sample,
             'n-topics': n_topics,
+            'paragraph-delimiter': paragraph_delimiter,
+            'paragraph-delimiter-regex': paragraph_delimiter_regex,
+            'classification-fields': classification_fields,
             'training-overrides': training_overrides,
         }.items() if v is not None}
         _inst = cls(org_id=org_id, api_key=api_key, base_url=base_url)
@@ -507,7 +518,7 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
 
                 The query must be in the form of a single SELECT statement. CTEs are allowed. For descriptive queries such as DESCRIBE TABLE or SHOW ALL TABLES must be wrapped eg SELECT * FROM (DESCRIBE TABLE doc) statement.
 
-                There are also several lower level views which can be helpful for more advanced queries, such as tokens_with_topics, doc_meta, doc_topics, paragraph_topics, subparagraph_topics, and sentence_topics.
+                There are also several lower level relations which can be helpful for more advanced queries, such as tokens, doc_meta, doc_topics, paragraph_topics, subparagraph_topics, and sentence_topics.
 
                 When a search query is provided, the doc, paragraph, subparagraph, and sentence tables are filtered by the most restrictive possible criteria. E.g. if the search_level is 'doc', each table is filtered to only include doc_ids that pass the semantic search filter. If the search level is sentence, paragraphs are filtered to only paragraph that contain sentences that pass the semantic search filter. The resulting tables are unordered.
 
