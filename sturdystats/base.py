@@ -60,6 +60,11 @@ class SturdyStatsBase:
         self._raise(resp)
         return resp.json()
 
+    def _delete(self, path: str) -> dict:
+        resp = self._session.delete(self._url(path))
+        self._raise(resp)
+        return resp.json()
+
     def _send_parquet(self, path: str, filepath: str) -> list[dict]:
         """Upload one parquet file or all *.parquet files in a directory, sequentially.
         → POST path  (e.g. datasets/{id}/append)

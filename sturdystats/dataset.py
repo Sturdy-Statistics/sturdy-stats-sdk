@@ -23,6 +23,24 @@ DatasetCommitResponse = TypedDict("DatasetCommitResponse", {
     'dataset-id': str,
 })
 
+DatasetAppendOneResponse = TypedDict("DatasetAppendOneResponse", {
+    'status': str,
+    'row-id': str,
+    'bytes': int,
+})
+
+DatasetDeleteResponse = TypedDict("DatasetDeleteResponse", {
+    'success': bool,
+})
+
+DatasetGrantPermissionResponse = TypedDict("DatasetGrantPermissionResponse", {
+    'success': bool,
+})
+
+DatasetRevokePermissionResponse = TypedDict("DatasetRevokePermissionResponse", {
+    'success': bool,
+})
+
 
 class Dataset(SturdyStatsBase):
     """Datasets are the interface between user data and the system. Upload data as parquet chunks for large datasets or individual rows for one-off appends — each record requires a `doc_id` and `doc` (VARCHAR) column; additional columns become queryable metadata. Once committed, a dataset is sealed into an immutable artifact that can be used to train a clf-base, clf-model, or index. Committed datasets cannot be modified."""
@@ -130,6 +148,89 @@ class Dataset(SturdyStatsBase):
             'metadata-json': metadata_json,
         }.items() if v is not None}
         return self._post(_path, _body)
+
+    def append_one(self, json_string: str) -> DatasetAppendOneResponse:
+        """
+        Append a single JSON object to an open dataset. The dataset must not yet be committed.
+        
+        Route: POST /datasets/{dataset_id}/append-one
+        
+        Args:
+            json_string
+        
+        Returns:
+            DatasetAppendOneResponse, a dict with:
+                status (str): Always "appended" on success.
+                row-id (str): UUID assigned to this uploaded row.
+                bytes (int): Size of the JSON string in bytes.
+        """
+        _path = f"datasets/{self.id}/append-one"
+        _body = {k: v for k, v in {
+            'json-string': json_string,
+        }.items() if v is not None}
+        return self._post(_path, _body)
+
+    def delete(self) -> DatasetDeleteResponse:
+        """
+        Permanently delete a dataset and all of its uploaded data. Requires manage permission. This cannot be undone.
+        
+        Route: DELETE /datasets/{dataset_id}
+        
+        Returns:
+            DatasetDeleteResponse, a dict with:
+                success (bool):
+        """
+        _path = f"datasets/{self.id}"
+        return self._delete(_path)
+
+    def list_permissions(self, transform = None) -> "pd.DataFrame":
+        """
+        List the access control list for a dataset — the API keys with access and their permission levels.
+        
+        Route: GET /datasets/{dataset_id}/permissions
+        
+        Returns:
+            pandas.DataFrame with columns:
+                api-key (str): API key the permission is granted to.
+                level (Literal['audit-only', 'read-only', 'read-write', 'manage']): Access level granted to this key.
+        """
+        _path = f"datasets/{self.id}/permissions"
+        _resp = self._get(_path)
+        import pandas as pd
+        _df = pd.DataFrame(_resp['keys'])
+        return transform(_df) if transform else _df
+
+    def grant_permission(self, key_id: str, level: Literal['audit-only', 'read-only', 'read-write', 'manage']) -> DatasetGrantPermissionResponse:
+        """
+        Grant an API key a permission level on a dataset.
+        
+        Route: POST /datasets/{dataset_id}/permissions/{key_id}
+        
+        Args:
+            level
+        
+        Returns:
+            DatasetGrantPermissionResponse, a dict with:
+                success (bool):
+        """
+        _path = f"datasets/{self.id}/permissions/{key_id}"
+        _body = {k: v for k, v in {
+            'level': level,
+        }.items() if v is not None}
+        return self._post(_path, _body)
+
+    def revoke_permission(self, key_id: str) -> DatasetRevokePermissionResponse:
+        """
+        Revoke an API key's access to a dataset.
+        
+        Route: DELETE /datasets/{dataset_id}/permissions/{key_id}
+        
+        Returns:
+            DatasetRevokePermissionResponse, a dict with:
+                success (bool):
+        """
+        _path = f"datasets/{self.id}/permissions/{key_id}"
+        return self._delete(_path)
 
     def wait(self, poll_interval_start: float = 2.0, poll_interval_max: float = 60.0):
         """Block until entity reaches ready or failed state. Returns self.

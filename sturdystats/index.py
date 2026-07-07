@@ -23,6 +23,18 @@ IndexStatusResponse = TypedDict("IndexStatusResponse", {
     'details': Optional[Any],
 })
 
+IndexDeleteResponse = TypedDict("IndexDeleteResponse", {
+    'success': bool,
+})
+
+IndexGrantPermissionResponse = TypedDict("IndexGrantPermissionResponse", {
+    'success': bool,
+})
+
+IndexRevokePermissionResponse = TypedDict("IndexRevokePermissionResponse", {
+    'success': bool,
+})
+
 
 class Index(SturdyStatsBase):
     """An index is a sparse topic model trained exclusively on a committed dataset. The model automatically infers interpretable topics and topic groups, then annotates every sentence, paragraph, and document with thematic content — storing the result as a structured, SQL-queryable data lake (DuckDB). Because the model uses joint probability rather than neural embeddings, the structure is explicit and inspectable: topics correspond to meaningful concepts, most values are zero, and every annotation can be traced back to specific passages.
@@ -63,7 +75,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         return transform(_df) if transform else _df
 
     @classmethod
-    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[str] = None, classification_fields: list = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
+    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[str] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', classification_fields: list = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
         Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `succeeded`. The index must be ready before any query endpoints can be used.
         
@@ -89,6 +101,11 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
 
                 This choice is frozen onto the index at train time and reused for every append, so all data in an index is segmented consistently.
             paragraph_delimiter_regex (default: None) — Custom paragraph-splitting regular expression. Required when `paragraph-delimiter` is "custom", and must be omitted otherwise.
+            paragraph_delimiter_pos (default: 'last') — Which paragraph a split delimiter's text is attached to:
+                - "last": the delimiter stays at the end of the paragraph that precedes it. This is the default.
+                - "first": the delimiter is moved to the start of the paragraph that follows it.
+
+                Like `paragraph-delimiter`, this choice is frozen onto the index at train time and reused for every append.
             classification_fields (default: [])
             training_overrides (default: None) — Advanced training overrides. Leave nil unless instructed.
         
@@ -106,6 +123,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             'n-topics': n_topics,
             'paragraph-delimiter': paragraph_delimiter,
             'paragraph-delimiter-regex': paragraph_delimiter_regex,
+            'paragraph-delimiter-pos': paragraph_delimiter_pos,
             'classification-fields': classification_fields,
             'training-overrides': training_overrides,
         }.items() if v is not None}
@@ -393,14 +411,14 @@ Example — which topics are associated with lower ratings for Whirlpool:
                 id (int): Integer topic ID.
                 label (str): Short descriptive label for the topic.
                 group_label (str): Broader group label that this topic belongs to.
-                test_mentions_topic (int): Number of level-units in the test subset that mention this topic (above topic-mention-cutoff).
-                control_mentions_topic (int): Number of level-units in the control subset that mention this topic (above topic-mention-cutoff). 0 if the topic is absent from the control subset.
+                test_mentions_topic (int): Number of distinct test-subset documents that have a level-unit mentioning this topic.
+                control_mentions_topic (int): Number of distinct control-subset documents that have a level-unit mentioning this topic. 0 if the topic is absent from the control subset.
                 test_metric_topic (float): Denoised average of test-metric over distinct test-subset documents that mention this topic. Shrunk toward control_metric_topic by prior-weight.
                 control_metric_topic (float): Denoised average of test-metric over distinct control-subset documents that mention this topic. Shrunk toward the whole-index per-topic average by prior-weight; the baseline test_metric_topic is compared against.
                 test_metric_global (float): Average of test-metric over all distinct documents in the test subset (topic-agnostic).
                 control_metric_global (float): Average of test-metric over all distinct documents in the control subset (topic-agnostic).
-                test_prevalence_topic (float): Denoised fraction of test-subset level-units that mention this topic. Shrunk toward control_prevalence_topic by prior-weight.
-                control_prevalence_topic (float): Denoised fraction of control-subset level-units that mention this topic. Shrunk toward the whole-index prevalence of this topic by prior-weight.
+                test_prevalence_topic (float): Denoised fraction of distinct test-subset documents that mention this topic. Shrunk toward control_prevalence_topic by prior-weight.
+                control_prevalence_topic (float): Denoised fraction of distinct control-subset documents that mention this topic. Shrunk toward the whole-index prevalence of this topic by prior-weight.
         """
         _path = f"indices/{self.id}/topics/metric"
         _body = {k: v for k, v in {
@@ -542,6 +560,68 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             'semantic-search-weight': semantic_search_weight,
         }.items() if v is not None}
         return self._load_parquet(_path, _body, transform=transform)
+
+    def delete(self) -> IndexDeleteResponse:
+        """
+        Permanently delete an index and its data. Requires manage permission. This cannot be undone.
+        
+        Route: DELETE /indices/{index_id}
+        
+        Returns:
+            IndexDeleteResponse, a dict with:
+                success (bool):
+        """
+        _path = f"indices/{self.id}"
+        return self._delete(_path)
+
+    def list_permissions(self, transform = None) -> "pd.DataFrame":
+        """
+        List the access control list for an index — the API keys with access and their permission levels.
+        
+        Route: GET /indices/{index_id}/permissions
+        
+        Returns:
+            pandas.DataFrame with columns:
+                api-key (str): API key the permission is granted to.
+                level (Literal['audit-only', 'read-only', 'read-write', 'manage']): Access level granted to this key.
+        """
+        _path = f"indices/{self.id}/permissions"
+        _resp = self._get(_path)
+        import pandas as pd
+        _df = pd.DataFrame(_resp['keys'])
+        return transform(_df) if transform else _df
+
+    def grant_permission(self, key_id: str, level: Literal['audit-only', 'read-only', 'read-write', 'manage']) -> IndexGrantPermissionResponse:
+        """
+        Grant an API key a permission level on an index.
+        
+        Route: POST /indices/{index_id}/permissions/{key_id}
+        
+        Args:
+            level
+        
+        Returns:
+            IndexGrantPermissionResponse, a dict with:
+                success (bool):
+        """
+        _path = f"indices/{self.id}/permissions/{key_id}"
+        _body = {k: v for k, v in {
+            'level': level,
+        }.items() if v is not None}
+        return self._post(_path, _body)
+
+    def revoke_permission(self, key_id: str) -> IndexRevokePermissionResponse:
+        """
+        Revoke an API key's access to an index.
+        
+        Route: DELETE /indices/{index_id}/permissions/{key_id}
+        
+        Returns:
+            IndexRevokePermissionResponse, a dict with:
+                success (bool):
+        """
+        _path = f"indices/{self.id}/permissions/{key_id}"
+        return self._delete(_path)
 
     def wait(self, poll_interval_start: float = 2.0, poll_interval_max: float = 60.0):
         """Block until entity reaches ready or failed state. Returns self.

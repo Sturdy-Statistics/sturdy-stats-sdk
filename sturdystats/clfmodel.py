@@ -23,6 +23,18 @@ ClfModelPredictOneResponse = TypedDict("ClfModelPredictOneResponse", {
     'result': dict,
 })
 
+ClfModelDeleteResponse = TypedDict("ClfModelDeleteResponse", {
+    'success': bool,
+})
+
+ClfModelGrantPermissionResponse = TypedDict("ClfModelGrantPermissionResponse", {
+    'success': bool,
+})
+
+ClfModelRevokePermissionResponse = TypedDict("ClfModelRevokePermissionResponse", {
+    'success': bool,
+})
+
 
 class ClfModel(SturdyStatsBase):
     """Classification is a two-stage process:
@@ -127,6 +139,68 @@ clf-models are designed for scalability and high-throughput inference, and requi
             'doc': doc,
         }.items() if v is not None}
         return self._post(_path, _body)
+
+    def delete(self) -> ClfModelDeleteResponse:
+        """
+        Permanently delete a clf-model and its trained artifacts. Requires manage permission. This cannot be undone.
+        
+        Route: DELETE /classifiers/models/{clf_model_id}
+        
+        Returns:
+            ClfModelDeleteResponse, a dict with:
+                success (bool):
+        """
+        _path = f"classifiers/models/{self.id}"
+        return self._delete(_path)
+
+    def list_permissions(self, transform = None) -> "pd.DataFrame":
+        """
+        List the access control list for a clf-model — the API keys with access and their permission levels.
+        
+        Route: GET /classifiers/models/{clf_model_id}/permissions
+        
+        Returns:
+            pandas.DataFrame with columns:
+                api-key (str): API key the permission is granted to.
+                level (Literal['audit-only', 'read-only', 'read-write', 'manage']): Access level granted to this key.
+        """
+        _path = f"classifiers/models/{self.id}/permissions"
+        _resp = self._get(_path)
+        import pandas as pd
+        _df = pd.DataFrame(_resp['keys'])
+        return transform(_df) if transform else _df
+
+    def grant_permission(self, key_id: str, level: Literal['audit-only', 'read-only', 'read-write', 'manage']) -> ClfModelGrantPermissionResponse:
+        """
+        Grant an API key a permission level on a clf-model.
+        
+        Route: POST /classifiers/models/{clf_model_id}/permissions/{key_id}
+        
+        Args:
+            level
+        
+        Returns:
+            ClfModelGrantPermissionResponse, a dict with:
+                success (bool):
+        """
+        _path = f"classifiers/models/{self.id}/permissions/{key_id}"
+        _body = {k: v for k, v in {
+            'level': level,
+        }.items() if v is not None}
+        return self._post(_path, _body)
+
+    def revoke_permission(self, key_id: str) -> ClfModelRevokePermissionResponse:
+        """
+        Revoke an API key's access to a clf-model.
+        
+        Route: DELETE /classifiers/models/{clf_model_id}/permissions/{key_id}
+        
+        Returns:
+            ClfModelRevokePermissionResponse, a dict with:
+                success (bool):
+        """
+        _path = f"classifiers/models/{self.id}/permissions/{key_id}"
+        return self._delete(_path)
 
     def wait(self, poll_interval_start: float = 2.0, poll_interval_max: float = 60.0):
         """Block until entity reaches ready or failed state. Returns self.

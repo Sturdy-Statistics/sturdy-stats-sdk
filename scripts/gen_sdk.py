@@ -16,7 +16,7 @@ def load_openapi():
     if not OPENAPI_PATH.exists():
         print("openapi.json not found, fetching from server...")
         import urllib.request
-        with urllib.request.urlopen("http://api.sturdystatistics.com/openapi.json") as r:
+        with urllib.request.urlopen("http://localhost:3333/openapi.json") as r:
             data = r.read()
         OPENAPI_PATH.write_bytes(data)
         print(f"  saved to {OPENAPI_PATH}")
@@ -25,10 +25,10 @@ def load_openapi():
 
 def openapi_path_key(short_route: str) -> tuple[str, str]:
     method, path = short_route.split(" ", 1)
-    full = OPENAPI_PREFIX + path.replace("{dataset_id}", "{dataset-id}") \
-                                .replace("{index_id}", "{index-id}") \
-                                .replace("{clf_base_id}", "{clf-base-id}") \
-                                .replace("{clf_model_id}", "{clf-model-id}")
+    # OpenAPI path params are hyphenated (e.g. {dataset-id}, {key-id}); config
+    # uses Python-friendly underscores. Hyphenate inside every {...} token.
+    path = re.sub(r"\{(\w+)\}", lambda m: "{" + m.group(1).replace("_", "-") + "}", path)
+    full = OPENAPI_PREFIX + path
     return method.lower(), full
 
 
@@ -369,6 +369,9 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
             lines.append("        return transform(_df) if transform else _df")
         else:
             lines.append("        return self._post(_path, _body)")
+
+    elif http_method == "DELETE":
+        lines.append("        return self._delete(_path)")
 
     lines.append("")
     return "\n".join(lines)
