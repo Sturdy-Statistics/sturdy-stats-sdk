@@ -437,7 +437,7 @@ Example — which topics are associated with lower ratings for Whirlpool:
         _df = pd.DataFrame(_resp['topics'])
         return transform(_df) if transform else _df
 
-    def search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], search_query: Optional[str] = None, filter: Optional[str] = None, topic_ids: Optional[list] = None, sort_by: str = 'relevance', topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, limit: int = 20, transform = None) -> "pd.DataFrame":
+    def search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], search_query: Optional[str] = None, filter: Optional[str] = None, topic_ids: Optional[list] = None, sort_by: str = 'relevance', topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, limit: int = 20, context: int = 0, max_excerpts_per_doc: Optional[int] = None, transform = None) -> "pd.DataFrame":
         """
         Retrieve and rank units from the index at a given granularity level. Supports three independent signals that can be combined freely: a natural language search query (keyword + semantic), a list of topic IDs to filter and score by, and a SQL filter against any column in the entity view. Results include per-unit scores and aggregated topic info.
 
@@ -488,6 +488,8 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
             limit (default: 20) — Maximum number of results to return.
+            context (default: 0) — Number of neighboring units to include on each side of each matched unit, returned in the `context` list. Expands along the finest index within the same parent (e.g. surrounding sentences in the same sub-paragraph). No-op at doc level.
+            max_excerpts_per_doc (default: None) — Cap on how many matched excerpts to return per document, keeping the top-ranked per doc so a single document can't dominate results. Unlimited when omitted.
         
         Returns:
             pandas.DataFrame with columns:
@@ -498,6 +500,7 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
                 text (str): Text content of this unit at the requested granularity level.
                 scores (dict): Relevance scores for this result.
                 topics (list): Topics associated with this unit (above topic-mention-cutoff), ordered by topic_id.
+                context (Optional[list]): Surrounding units (ordered pre → match → post) when `context` > 0; null otherwise and at doc level.
         """
         _path = f"indices/{self.id}/docs/search"
         _body = {k: v for k, v in {
@@ -510,6 +513,8 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             'semantic-search-cutoff': semantic_search_cutoff,
             'semantic-search-weight': semantic_search_weight,
             'limit': limit,
+            'context': context,
+            'max-excerpts-per-doc': max_excerpts_per_doc,
         }.items() if v is not None}
         _resp = self._post(_path, _body)
         import pandas as pd
