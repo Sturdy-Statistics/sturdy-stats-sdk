@@ -75,7 +75,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         return transform(_df) if transform else _df
 
     @classmethod
-    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[str] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', classification_fields: list = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
+    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[Any] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', vocab_exclude_regex: Optional[Any] = None, filter_topics: Literal['eager', 'conservative', 'none'] = 'conservative', classification_fields: list = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
         Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `succeeded`. The index must be ready before any query endpoints can be used.
         
@@ -106,6 +106,13 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
                 - "first": the delimiter is moved to the start of the paragraph that follows it.
 
                 Like `paragraph-delimiter`, this choice is frozen onto the index at train time and reused for every append.
+            vocab_exclude_regex (default: None) — Regular expression matching boilerplate to exclude from the topic model, such as a repeated header or signature block. Matched text stays in the document and is still returned in search results, but receives no topic. Matched against the whole document before it is split into paragraphs.
+
+                Like `paragraph-delimiter`, this choice is frozen onto the index at train time and reused for every append.
+            filter_topics (default: 'conservative') — Defines configuration for statistical topic filtering.
+                - "eager": Ideal for high noise corpora in which a majority of the documents in which only a small percentage of the document carries semantic weight. Yields the most semantically interesting results at risk of lower recall.
+                - "conservative": Filter out only excerpts at containing extremely strong signals for boilerplate and incongruity.
+                - "none": Ideal for use-cases requiring high recall and exhaustive coverage of the corpus. Enables more flexibility at time of retrieval.
             classification_fields (default: [])
             training_overrides (default: None) — Advanced training overrides. Leave nil unless instructed.
         
@@ -124,6 +131,8 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             'paragraph-delimiter': paragraph_delimiter,
             'paragraph-delimiter-regex': paragraph_delimiter_regex,
             'paragraph-delimiter-pos': paragraph_delimiter_pos,
+            'vocab-exclude-regex': vocab_exclude_regex,
+            'filter-topics': filter_topics,
             'classification-fields': classification_fields,
             'training-overrides': training_overrides,
         }.items() if v is not None}
