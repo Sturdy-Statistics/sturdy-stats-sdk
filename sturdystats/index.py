@@ -75,7 +75,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         return transform(_df) if transform else _df
 
     @classmethod
-    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[Any] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', vocab_exclude_regex: Optional[Any] = None, filter_topics: Literal['eager', 'conservative', 'none'] = 'conservative', classification_fields: list = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
+    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[Any] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', vocab_exclude_regex: Optional[Any] = None, filter_topics: Literal['eager', 'moderate', 'conservative', 'none'] = 'eager', classification_fields: Optional[list] = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
         Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `succeeded`. The index must be ready before any query endpoints can be used.
         
@@ -109,8 +109,9 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             vocab_exclude_regex (default: None) — Regular expression matching boilerplate to exclude from the topic model, such as a repeated header or signature block. Matched text stays in the document and is still returned in search results, but receives no topic. Matched against the whole document before it is split into paragraphs.
 
                 Like `paragraph-delimiter`, this choice is frozen onto the index at train time and reused for every append.
-            filter_topics (default: 'conservative') — Defines configuration for statistical topic filtering.
+            filter_topics (default: 'eager') — Defines configuration for statistical topic filtering.
                 - "eager": Ideal for high noise corpora in which a majority of the documents in which only a small percentage of the document carries semantic weight. Yields the most semantically interesting results at risk of lower recall.
+                - "moderate": Similar processing to eager, but with a much higher threshold confidence criterion for filtering.
                 - "conservative": Filter out only excerpts at containing extremely strong signals for boilerplate and incongruity.
                 - "none": Ideal for use-cases requiring high recall and exhaustive coverage of the corpus. Enables more flexibility at time of retrieval.
             classification_fields (default: [])
@@ -184,7 +185,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         _path = f"indices/{self.id}"
         return self._get(_path)
 
-    def topics_search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], filter: Optional[str] = None, topic_mention_cutoff: float = 2.0, search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
+    def topics_search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], filter: Optional[str] = None, topic_mention_cutoff: float = 2.0, search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, topic_mention_criteria: list = [], transform = None) -> "pd.DataFrame":
         """
         Returns a high-level rollup of the topics present in any filtered subset of the index. Reports `mentions` (raw count of units containing the topic) and `prevalence` (fraction of the subset containing it). The `level` parameter sets the unit of measurement: at `level: "doc"`, 13 mentions means the topic occurred in 13 documents; at `level: "paragraph"`, 13 mentions means 13 paragraphs. A topic in 25 of 50 paragraphs has prevalence 0.5.
 
@@ -226,10 +227,14 @@ Example — topics in verified Bosch reviews mentioning noise:
                 - subparagraph and above: subparagraph_idx (USMALLINT)
                 - sentence: sentence_idx (USMALLINT)
                 Example: "rating > 4 AND is_verified = true"
-            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
+
+                Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
+                [[{"level": "doc", "metric": "prevalence", "cutoff": 0.3}], [{"level": "paragraph", "metric": "count", "cutoff": 8}]]
         
         Returns:
             pandas.DataFrame with columns:
@@ -238,6 +243,8 @@ Example — topics in verified Bosch reviews mentioning noise:
                 group_label (str): Broader group label that this topic belongs to.
                 mentions (int): Number of units in the filtered set that mention this topic (above topic-mention-cutoff).
                 prevalence (float): Fraction of units in the filtered set that mention this topic.
+                doc_mentions (int): Number of distinct documents in the filtered set that mention this topic (above topic-mention-cutoff). At doc level this equals mentions.
+                doc_prevalence (float): Fraction of distinct documents in the filtered set that mention this topic. At doc level this equals prevalence.
         """
         _path = f"indices/{self.id}/topics/search"
         _body = {k: v for k, v in {
@@ -247,13 +254,14 @@ Example — topics in verified Bosch reviews mentioning noise:
             'search-query': search_query,
             'semantic-search-cutoff': semantic_search_cutoff,
             'semantic-search-weight': semantic_search_weight,
+            'topic-mention-criteria': topic_mention_criteria,
         }.items() if v is not None}
         _resp = self._post(_path, _body)
         import pandas as pd
         _df = pd.DataFrame(_resp['topics'])
         return transform(_df) if transform else _df
 
-    def topics_diff(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], test_subset: str, control_subset: str, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, confidence_cutoff: float = 0.95, test_search_query: Optional[str] = None, control_search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
+    def topics_diff(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], test_subset: str, control_subset: str, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, confidence_cutoff: float = 0.95, test_search_query: Optional[str] = None, control_search_query: Optional[str] = None, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, topic_mention_criteria: list = [], transform = None) -> "pd.DataFrame":
         """
         Compares topic prevalence between a test subset and a control subset (each a SQL filter) and returns topics significantly more prevalent in the test subset, via empirical Bayes beta-binomial statistics. `confidence` is the posterior probability that the topic's prevalence in the test subset exceeds the control subset; only topics above `confidence-cutoff` are returned, ordered by confidence descending. The two subsets are independent filters — to nest the test subset within the control subset, repeat the control's conditions in the test filter.
 
@@ -306,13 +314,17 @@ Example — topics that distinguish 1–2 star Bosch reviews from 4–5 star Bos
                 - paragraph and above: paragraph_idx (USMALLINT)
                 - subparagraph and above: subparagraph_idx (USMALLINT)
                 - sentence: sentence_idx (USMALLINT)
-            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             prior_weight (default: 10.0) — Strength of the empirical Bayes prior when comparing topic prevalences. Higher values shrink estimates toward the global baseline, suppressing noise on low-mention topics.
             confidence_cutoff (default: 0.95) — Minimum posterior probability that topic prevalence in the test subset exceeds the control subset for a topic to be included in results.
             test_search_query (default: None) — Search query to further scope the test subset semantically.
             control_search_query (default: None) — Search query to further scope the control subset semantically.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
+
+                Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
+                [[{"level": "doc", "metric": "prevalence", "cutoff": 0.3}], [{"level": "paragraph", "metric": "count", "cutoff": 8}]]
         
         Returns:
             pandas.DataFrame with columns:
@@ -326,6 +338,10 @@ Example — topics that distinguish 1–2 star Bosch reviews from 4–5 star Bos
                 test_prevalence (float): Fraction of test-subset units mentioning this topic.
                 control_prevalence (float): Fraction of control-subset units mentioning this topic.
                 global_prevalence (float): Fraction of all units in the index mentioning this topic. Used as the empirical Bayes prior.
+                test_doc_mentions (int): Number of distinct documents in the test subset that mention this topic. Reporting only; the confidence comparison is computed at the query level. At doc level this equals test_mentions.
+                control_doc_mentions (int): Number of distinct documents in the control subset that mention this topic. At doc level this equals control_mentions.
+                test_doc_prevalence (float): Fraction of distinct documents in the test subset that mention this topic. At doc level this equals test_prevalence.
+                control_doc_prevalence (float): Fraction of distinct documents in the control subset that mention this topic. At doc level this equals control_prevalence.
         """
         _path = f"indices/{self.id}/topics/diff"
         _body = {k: v for k, v in {
@@ -339,13 +355,14 @@ Example — topics that distinguish 1–2 star Bosch reviews from 4–5 star Bos
             'control-search-query': control_search_query,
             'semantic-search-cutoff': semantic_search_cutoff,
             'semantic-search-weight': semantic_search_weight,
+            'topic-mention-criteria': topic_mention_criteria,
         }.items() if v is not None}
         _resp = self._post(_path, _body)
         import pandas as pd
         _df = pd.DataFrame(_resp['topics'])
         return transform(_df) if transform else _df
 
-    def topics_metric(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], test_metric: str, test_subset: Optional[str] = None, control_subset: Optional[str] = None, search_query: Optional[str] = None, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, transform = None) -> "pd.DataFrame":
+    def topics_metric(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], test_metric: str, test_subset: Optional[str] = None, control_subset: Optional[str] = None, search_query: Optional[str] = None, topic_mention_cutoff: float = 2.0, prior_weight: float = 10.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, topic_mention_criteria: list = [], transform = None) -> "pd.DataFrame":
         """
         Compares a per-document metric across topics between two independent subsets of the index. For each topic, returns the metric averaged over the documents that mention it — denoised toward the control and whole-index baselines — so you can see which topics co-occur with higher or lower metric values.
 
@@ -407,13 +424,17 @@ Example — which topics are associated with lower ratings for Whirlpool:
                 filtering. Applied to both the test and control subsets (an overall universe filter), so
                 test and control are each intersected with the searched set. Activates the same blended
                 keyword + semantic search as search-query.
-            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             prior_weight (default: 10.0) — Strength of the empirical Bayes prior used to denoise the test subset's per-topic values.
                 Test estimates shrink toward the control subset's per-topic estimates, which in turn shrink
                 toward the whole-index per-topic baseline, each weighted by this many pseudo-observations.
                 Higher values suppress noise on low-mention topics; 0 returns (very nearly) raw averages.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
+
+                Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
+                [[{"level": "doc", "metric": "prevalence", "cutoff": 0.3}], [{"level": "paragraph", "metric": "count", "cutoff": 8}]]
         
         Returns:
             pandas.DataFrame with columns:
@@ -440,13 +461,14 @@ Example — which topics are associated with lower ratings for Whirlpool:
             'prior-weight': prior_weight,
             'semantic-search-cutoff': semantic_search_cutoff,
             'semantic-search-weight': semantic_search_weight,
+            'topic-mention-criteria': topic_mention_criteria,
         }.items() if v is not None}
         _resp = self._post(_path, _body)
         import pandas as pd
         _df = pd.DataFrame(_resp['topics'])
         return transform(_df) if transform else _df
 
-    def search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], search_query: Optional[str] = None, filter: Optional[str] = None, topic_ids: Optional[list] = None, sort_by: str = 'relevance', topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, limit: int = 20, context: int = 0, max_excerpts_per_doc: Optional[int] = None, transform = None) -> "pd.DataFrame":
+    def search(self, level: Literal['doc', 'paragraph', 'subparagraph', 'sentence'], search_query: Optional[str] = None, filter: Optional[str] = None, topic_ids: Optional[list] = None, sort_by: str = 'relevance', topic_mention_cutoff: float = 2.0, semantic_search_cutoff: float = 0.1, semantic_search_weight: float = 0.3, limit: int = 20, context: int = 0, max_excerpts_per_doc: Optional[int] = None, topic_mention_criteria: list = [], transform = None) -> "pd.DataFrame":
         """
         Retrieve and rank units from the index at a given granularity level. Supports three independent signals that can be combined freely: a natural language search query (keyword + semantic), a list of topic IDs to filter and score by, and a SQL filter against any column in the entity view. Results include per-unit scores and aggregated topic info.
 
@@ -493,12 +515,16 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
                 Example: "rating > 4 AND is_verified = true"
             topic_ids (default: None) — Filter results to units that mention these topic IDs (integer IDs from the topics/search endpoint). Units are ranked by their combined score for these topics.
             sort_by (default: 'relevance') — SQL expression for ORDER BY DESC. The special value "relevance" auto-selects: search_score * topic_score (both), search_score (search only), topic_score (topics only), doc_id (neither).
-            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
             limit (default: 20) — Maximum number of results to return.
             context (default: 0) — Number of neighboring units to include on each side of each matched unit, returned in the `context` list. Expands along the finest index within the same parent (e.g. surrounding sentences in the same sub-paragraph). No-op at doc level.
             max_excerpts_per_doc (default: None) — Cap on how many matched excerpts to return per document, keeping the top-ranked per doc so a single document can't dominate results. Unlimited when omitted.
+            topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
+
+                Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
+                [[{"level": "doc", "metric": "prevalence", "cutoff": 0.3}], [{"level": "paragraph", "metric": "count", "cutoff": 8}]]
         
         Returns:
             pandas.DataFrame with columns:
@@ -524,6 +550,7 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             'limit': limit,
             'context': context,
             'max-excerpts-per-doc': max_excerpts_per_doc,
+            'topic-mention-criteria': topic_mention_criteria,
         }.items() if v is not None}
         _resp = self._post(_path, _body)
         import pandas as pd
@@ -557,7 +584,7 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
                 We expose the underlying search scores in a 'search_scores' table that contains the topic_search_score, exact_match_score, and the combined search_score. We expose the processed search_query under the database namespace `search_query.main`. This database namespace contains all the same tables as the main namespace, scoped only to the provided search query. This underlying data provides a powerful set of options for advanced retrieval use-cases.
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
             search_level (default: None) — Granularity level to use for search setup when search-query is provided. Required if search-query is set.
-            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present.
+            topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
             semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
         
