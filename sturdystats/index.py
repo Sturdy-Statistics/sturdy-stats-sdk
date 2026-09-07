@@ -20,6 +20,7 @@ IndexStatusResponse = TypedDict("IndexStatusResponse", {
     'status': str,
     'created-at': Optional[str],
     'ready-at': Optional[str],
+    'clone-provenance': Optional[dict],
     'details': Optional[Any],
 })
 
@@ -67,6 +68,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
                     - failed
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the index became ready. Null if not yet complete.
+                clone-provenance (Optional[dict]): Clone lineage, or null for a normally trained index.
         """
         _path = f"indices"
         _resp = self._get(_path)
@@ -75,7 +77,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         return transform(_df) if transform else _df
 
     @classmethod
-    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[Any] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', vocab_exclude_regex: Optional[Any] = None, filter_topics: Literal['eager', 'moderate', 'conservative', 'none'] = 'eager', classification_fields: Optional[list] = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
+    def create(cls, name: str, dataset_id: str, private_annotations: bool = False, model_arch: Literal['aalda', 'aalda-para', 'aalda-para-sent'] = 'aalda-para', burn_in: int = 5000, sample: int = 150, n_topics: int = 192, paragraph_delimiter: Literal['double-newline', 'single-newline', 'custom'] = 'double-newline', paragraph_delimiter_regex: Optional[str] = None, paragraph_delimiter_pos: Literal['first', 'last'] = 'last', vocab_exclude_regex: Optional[str] = None, vocab_size: int = 10000, vocab_pos_tags: list = ['ADJ', 'ADV', 'NOUN', 'PROPN', 'VERB'], filter_topics: Literal['eager', 'moderate', 'conservative', 'none'] = 'eager', classification_fields: Optional[list] = [], training_overrides: Optional[Any] = None, org_id = None, api_key = None, base_url = None) -> "Index":
         """
         Train a topic model index over a committed dataset. Training runs asynchronously — poll `/jobs/:id` until status is `succeeded`. The index must be ready before any query endpoints can be used.
         
@@ -109,6 +111,8 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             vocab_exclude_regex (default: None) — Regular expression matching boilerplate to exclude from the topic model, such as a repeated header or signature block. Matched text stays in the document and is still returned in search results, but receives no topic. Matched against the whole document before it is split into paragraphs.
 
                 Like `paragraph-delimiter`, this choice is frozen onto the index at train time and reused for every append.
+            vocab_size (default: 10000) — Maximum number of vocabulary entries retained for topic-model training after eligibility filtering and frequency dropping. Defaults to 10,000. Values from 1 through 60,000 are accepted; very small values are useful for experiments but may reduce topic quality.
+            vocab_pos_tags (default: ['ADJ', 'ADV', 'NOUN', 'PROPN', 'VERB']) — Allow-list of normalized Universal POS tags used to build the topic-model vocabulary. Defaults to ADJ, ADV, NOUN, PROPN, and VERB. For every policy, low-value adverb lemmas remain excluded and the lemma `not` remains specially included.
             filter_topics (default: 'eager') — Defines configuration for statistical topic filtering.
                 - "eager": Ideal for high noise corpora in which a majority of the documents in which only a small percentage of the document carries semantic weight. Yields the most semantically interesting results at risk of lower recall.
                 - "moderate": Similar processing to eager, but with a much higher threshold confidence criterion for filtering.
@@ -133,6 +137,8 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
             'paragraph-delimiter-regex': paragraph_delimiter_regex,
             'paragraph-delimiter-pos': paragraph_delimiter_pos,
             'vocab-exclude-regex': vocab_exclude_regex,
+            'vocab-size': vocab_size,
+            'vocab-pos-tags': vocab_pos_tags,
             'filter-topics': filter_topics,
             'classification-fields': classification_fields,
             'training-overrides': training_overrides,
@@ -180,6 +186,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
                     - failed
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the index became ready. Null if not yet complete.
+                clone-provenance (Optional[dict]): Clone lineage, or null for a normally trained index.
                 details (Optional[Any]): Job progress and metrics while training. Present on get, absent on list.
         """
         _path = f"indices/{self.id}"
@@ -230,7 +237,7 @@ Example — topics in verified Bosch reviews mentioning noise:
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             search_query (default: None) — Natural language search query. Activates semantic search using the index topic model combined with exact match keyword matching. Results are ranked by a blended score controlled by semantic-search-weight; units below semantic-search-cutoff are excluded.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
-            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            semantic_search_weight (default: 0.3) — Controls the balance between exact text matches and semantic similarity. Exact matches are weighted using term frequency statistics for the requested result level. 0.0 uses only exact matching; 1.0 uses only semantic similarity.
             topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
 
                 Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
@@ -320,7 +327,7 @@ Example — topics that distinguish 1–2 star Bosch reviews from 4–5 star Bos
             test_search_query (default: None) — Search query to further scope the test subset semantically.
             control_search_query (default: None) — Search query to further scope the control subset semantically.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
-            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            semantic_search_weight (default: 0.3) — Controls the balance between exact text matches and semantic similarity. Exact matches are weighted using term frequency statistics for the requested result level. 0.0 uses only exact matching; 1.0 uses only semantic similarity.
             topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
 
                 Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
@@ -430,7 +437,7 @@ Example — which topics are associated with lower ratings for Whirlpool:
                 toward the whole-index per-topic baseline, each weighted by this many pseudo-observations.
                 Higher values suppress noise on low-mention topics; 0 returns (very nearly) raw averages.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
-            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            semantic_search_weight (default: 0.3) — Controls the balance between exact text matches and semantic similarity. Exact matches are weighted using term frequency statistics for the requested result level. 0.0 uses only exact matching; 1.0 uses only semantic similarity.
             topic_mention_criteria (default: []) — Advanced parameter for more complex topic inclusion criteria. Provides the ability to operate at multiple semantic levels and to use both count and prevalence values. The list of lists structure enable complex AND/OR logic. The outer list is OR, each inner list is AND. [[A, B], [C]] means (A AND B) OR C.
 
                 Example — a topic counts only if it is at least 30% of the document, or else strongly present in the paragraph itself:
@@ -517,7 +524,7 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             sort_by (default: 'relevance') — SQL expression for ORDER BY DESC. The special value "relevance" auto-selects: search_score * topic_score (both), search_score (search only), topic_score (topics only), doc_id (neither).
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
-            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            semantic_search_weight (default: 0.3) — Controls the balance between exact text matches and semantic similarity. Exact matches are weighted using term frequency statistics for the requested result level. 0.0 uses only exact matching; 1.0 uses only semantic similarity.
             limit (default: 20) — Maximum number of results to return.
             context (default: 0) — Number of neighboring units to include on each side of each matched unit, returned in the `context` list. Expands along the finest index within the same parent (e.g. surrounding sentences in the same sub-paragraph). No-op at doc level.
             max_excerpts_per_doc (default: None) — Cap on how many matched excerpts to return per document, keeping the top-ranked per doc so a single document can't dominate results. Unlimited when omitted.
@@ -586,7 +593,7 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             search_level (default: None) — Granularity level to use for search setup when search-query is provided. Required if search-query is set.
             topic_mention_cutoff (default: 2.0) — Minimum number of words attributed to a topic within a semantic unit for that unit to be considered as mentioning the topic. Higher values restrict to units where the topic is strongly present. See topic-mention-criteria for more advanced criteria.
             semantic_search_cutoff (default: 0.1) — Minimum combined search score for a unit to appear in results when search-query is provided. Scores start near 0 (Hellinger distance scale); higher values restrict to closer matches.
-            semantic_search_weight (default: 0.3) — Blend between IDF weighted exact match search and semantic (topic-based) search. 0.0 = pure keyword match, 1.0 = pure semantic similarity.
+            semantic_search_weight (default: 0.3) — Controls the balance between exact text matches and semantic similarity. Exact matches are weighted using term frequency statistics for the requested result level. 0.0 uses only exact matching; 1.0 uses only semantic similarity.
         
         Returns:
             pandas.DataFrame of the query result.
@@ -601,6 +608,26 @@ Example — LG paragraphs about door-seal leaks that mention topic 42:
             'semantic-search-weight': semantic_search_weight,
         }.items() if v is not None}
         return self._load_parquet(_path, _body, transform=transform)
+
+    def delete_documents(self, doc_ids: list) -> "Job":
+        """
+        Asynchronously delete between 1 and 20 document IDs from a ready index. IDs that are not present in the index are ignored. Poll the returned job until it succeeds. For larger removals, create a filtered clone of the index.
+        
+        Route: POST /indices/{index_id}/documents/delete
+        
+        Args:
+            doc_ids — Document IDs to delete. Provide between 1 and 20 IDs. For larger removals, create a filtered clone of the index.
+        
+        Returns:
+            Job for polling the asynchronous operation.
+        """
+        _path = f"indices/{self.id}/documents/delete"
+        _body = {k: v for k, v in {
+            'doc-ids': doc_ids,
+        }.items() if v is not None}
+        from .job import Job
+        _resp = self._post(_path, _body)
+        return Job(self, _resp['job-id'])
 
     def delete(self) -> IndexDeleteResponse:
         """

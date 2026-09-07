@@ -16,7 +16,7 @@ def load_openapi():
     if not OPENAPI_PATH.exists():
         print("openapi.json not found, fetching from server...")
         import urllib.request
-        with urllib.request.urlopen("http://api.sturdystatistics.com/openapi.json") as r:
+        with urllib.request.urlopen("https://api.sturdystatistics.com/openapi.json") as r:
             data = r.read()
         OPENAPI_PATH.write_bytes(data)
         print(f"  saved to {OPENAPI_PATH}")
@@ -55,6 +55,10 @@ def py_type(info: dict) -> str:
     enum = info.get("enum")
     if enum and all(isinstance(e, (str, int, bool)) for e in enum):
         return "Literal[" + ", ".join(repr(e) for e in enum) + "]"
+    if "type" not in info and "allOf" in info:
+        for branch in info["allOf"]:
+            if branch.get("type") or branch.get("enum") or branch.get("oneOf") or branch.get("anyOf"):
+                return py_type(branch)
     # nullable / union expressed via oneOf/anyOf: pick non-null branches
     for key in ("oneOf", "anyOf"):
         if key in info:
@@ -251,6 +255,9 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
     elif mtype == "parquet_response":
         ret_ann = '"pd.DataFrame"'
         returns_doc = ["            pandas.DataFrame of the query result."]
+    elif mtype == "job_response":
+        ret_ann = '"Job"'
+        returns_doc = ["            Job for polling the asynchronous operation."]
     elif response_key:
         ret_ann = '"pd.DataFrame"'
         cols = get_dataframe_columns(op, response_key)
@@ -359,7 +366,11 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
             lines.append("        return self._get(_path)")
 
     elif http_method == "POST":
-        if response_key:
+        if mtype == "job_response":
+            lines.append("        from .job import Job")
+            lines.append("        _resp = self._post(_path, _body)")
+            lines.append("        return Job(self, _resp['job-id'])")
+        elif response_key:
             lines.append("        _resp = self._post(_path, _body)")
             nav = "_resp"
             for k in response_key:

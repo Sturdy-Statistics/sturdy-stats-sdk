@@ -108,6 +108,11 @@
           "type": "parquet_response"
         },
         {
+          "name": "delete_documents",
+          "route": "POST /indices/{index_id}/documents/delete",
+          "type": "job_response"
+        },
+        {
           "name": "delete",
           "route": "DELETE /indices/{index_id}"
         },

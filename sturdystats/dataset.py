@@ -64,7 +64,7 @@ class Dataset(SturdyStatsBase):
         return transform(_df) if transform else _df
 
     @classmethod
-    def create(cls, name: str, metadata_json: Any = None, org_id = None, api_key = None, base_url = None) -> "Dataset":
+    def create(cls, name: str, metadata_json: Optional[str] = None, org_id = None, api_key = None, base_url = None) -> "Dataset":
         """
         Create a new empty dataset. After creation, upload parquet chunks via the append endpoint, then call commit to finalise. The uploaded parquet files must contain at least a `doc_id` and `doc` (VARCHAR, non-empty) column; all other columns are preserved as queryable metadata.
         
@@ -129,7 +129,7 @@ class Dataset(SturdyStatsBase):
         _path = f"datasets/{self.id}/append"
         return self._send_parquet(_path, filepath)
 
-    def commit(self, metadata_json: Any = None) -> DatasetCommitResponse:
+    def commit(self, metadata_json: Optional[str] = None) -> DatasetCommitResponse:
         """
         Seal the dataset and trigger finalisation. No further chunks can be appended after this call. Finalisation (compaction to a single duckdb file) runs asynchronously — poll `GET /datasets/:id` until `status` is `ready`. A committed dataset can be used to train a clf-base or index.
         
