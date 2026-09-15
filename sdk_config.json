@@ -37,6 +37,11 @@
           "route": "POST /datasets/{dataset_id}/append-one"
         },
         {
+          "name": "sql",
+          "route": "POST /datasets/{dataset_id}/sql",
+          "type": "parquet_response"
+        },
+        {
           "name": "delete",
           "route": "DELETE /datasets/{dataset_id}"
         },
@@ -100,7 +105,22 @@
         {
           "name": "search",
           "route": "POST /indices/{index_id}/docs/search",
-          "response_key": ["results"]
+          "response_key": ["results"],
+          "param_order": [
+            "level",
+            "search-query",
+            "filter",
+            "topic-ids",
+            "sort-by",
+            "topic-mention-cutoff",
+            "semantic-search-cutoff",
+            "semantic-search-weight",
+            "limit",
+            "context",
+            "max-excerpts-per-doc",
+            "topic-mention-criteria",
+            "summary-level"
+          ]
         },
         {
           "name": "sql",
@@ -110,6 +130,26 @@
         {
           "name": "delete_documents",
           "route": "POST /indices/{index_id}/documents/delete",
+          "type": "job_response"
+        },
+        {
+          "name": "list_topics",
+          "route": "GET /indices/{index_id}/topics",
+          "response_key": ["topics"]
+        },
+        {
+          "name": "list_topic_groups",
+          "route": "GET /indices/{index_id}/topic-groups",
+          "response_key": ["groups"]
+        },
+        {
+          "name": "edit_topics",
+          "route": "POST /indices/{index_id}/topics/edits",
+          "type": "job_response"
+        },
+        {
+          "name": "edit_topic_groups",
+          "route": "POST /indices/{index_id}/topic-groups/edits",
           "type": "job_response"
         },
         {
