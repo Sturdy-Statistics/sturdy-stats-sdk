@@ -20,6 +20,29 @@ IndexStatusResponse = TypedDict("IndexStatusResponse", {
     'status': str,
     'created-at': Optional[str],
     'ready-at': NotRequired[Optional[str]],
+    'archived-at': NotRequired[str],
+    'details': NotRequired[Optional[dict]],
+})
+
+IndexArchiveResponse = TypedDict("IndexArchiveResponse", {
+    'id': str,
+    'name': str,
+    'dataset': str,
+    'status': str,
+    'created-at': Optional[str],
+    'ready-at': NotRequired[Optional[str]],
+    'archived-at': NotRequired[str],
+    'details': NotRequired[Optional[dict]],
+})
+
+IndexRestoreResponse = TypedDict("IndexRestoreResponse", {
+    'id': str,
+    'name': str,
+    'dataset': str,
+    'status': str,
+    'created-at': Optional[str],
+    'ready-at': NotRequired[Optional[str]],
+    'archived-at': NotRequired[str],
     'details': NotRequired[Optional[dict]],
 })
 
@@ -50,26 +73,30 @@ Once `ready`, the index exposes five query endpoints that compose naturally:
 
 All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `subparagraph`, or `sentence`), and all user-uploaded metadata columns are filter targets at every level. The endpoints share the same underlying views, so they are fully compatible: the same filters and search queries behave identically everywhere, and any high-level result can be unrolled to the underlying passages — the exact text behind any topic, segment, or metric is always retrievable via `docs/search` or `sql`."""
 
-    def list(self, transform = None) -> "pd.DataFrame":
+    def list(self, transform = None, *, status: Optional[Literal['initializing', 'ready', 'failed', 'archived']] = None) -> "pd.DataFrame":
         """
-        List all indices visible to the caller within this organisation.
+        List all indices visible to the caller within this organisation, including archived indices. Filter by status to select one lifecycle state.
         
         Route: GET /indices
+        
+        Args:
+            status (default: None)
         
         Returns:
             pandas.DataFrame with columns:
                 id (str): Index identifier (ix-<uuid>).
                 name (str): Human-readable name.
                 dataset (str): ID of the dataset this index was built from.
-                status (str): Lifecycle status:
-                    - initializing — training in progress
-                    - ready — available to query
-                    - failed
+                status (str): An index is initializing while training, ready when available, failed after unsuccessful training, or archived until restored.
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the index became ready. Null if not yet complete.
+                archived-at (str): When the current archive began. Present while archived.
         """
         _path = f"indices"
-        _resp = self._get(_path)
+        _params = {k: v for k, v in {
+            'status': status,
+        }.items() if v is not None}
+        _resp = self._get(_path, params=_params or None)
         import pandas as pd
         _df = pd.DataFrame(_resp['indices'])
         return transform(_df) if transform else _df
@@ -84,7 +111,7 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
         Args:
             name — Human-readable name for this index.
             dataset_id — ID of the committed dataset to build the index from. The dataset must be committed before training.
-            private_annotations (default: False) — Reserved for future use.
+            private_annotations (default: False) — Generate topic labels locally without sending data to an external annotation provider.
             model_arch (default: 'aalda-para') — Topic model architecture to train:
                 - "aalda": document-level topics. This is best for short documents such as tweets, text messsages, or abstracts. This model also provides the fastest training speed.
                 - "aalda-para": paragraph-level topic model. This architecture is best for longer documents with short 'paragraph', such as phone call transcripts with alternating speakers or web content.
@@ -178,13 +205,11 @@ All endpoints operate at a configurable granularity level (`doc`, `paragraph`, `
                 id (str): Index identifier (ix-<uuid>).
                 name (str): Human-readable name.
                 dataset (str): ID of the dataset this index was built from.
-                status (str): Lifecycle status:
-                    - initializing — training in progress
-                    - ready — available to query
-                    - failed
+                status (str): An index is initializing while training, ready when available, failed after unsuccessful training, or archived until restored.
                 created-at (Optional[str]): When training was requested.
                 ready-at (Optional[str]): When the index became ready. Null if not yet complete.
-                details (Optional[dict]): Live job diagnostics and Numix progress. Use index status, not progress percentage, as the authoritative completion signal. Present on get, absent on list.
+                archived-at (str): When the current archive began. Present while archived.
+                details (Optional[dict]): Live job diagnostics and Numix progress. The index status indicates when serving is available. Present on get.
         """
         _path = f"indices/{self.id}"
         return self._get(_path)
@@ -721,6 +746,48 @@ Example — find relevant LG reviews and, for each document, extract every sente
         _resp = self._post(_path, _body)
         return Job(self, _resp['job-id'])
 
+    def archive(self) -> IndexArchiveResponse:
+        """
+        Take a ready index out of service while keeping its data, ID, name, and permissions. Archived indices still appear in index listings. Queries and updates return 409 until the index is restored. Each index can be archived twice per UTC month. Requires manage permission.
+        
+        Route: POST /indices/{index_id}/archive
+        
+        Returns:
+            IndexArchiveResponse, a dict with:
+                id (str): Index identifier (ix-<uuid>).
+                name (str): Human-readable name.
+                dataset (str): ID of the dataset this index was built from.
+                status (str): An index is initializing while training, ready when available, failed after unsuccessful training, or archived until restored.
+                created-at (Optional[str]): When training was requested.
+                ready-at (Optional[str]): When the index became ready. Null if not yet complete.
+                archived-at (str): When the current archive began. Present while archived.
+                details (Optional[dict]): Live job diagnostics and Numix progress. The index status indicates when serving is available. Present on get.
+        """
+        _path = f"indices/{self.id}/archive"
+        _body = {}
+        return self._post(_path, _body)
+
+    def restore(self) -> IndexRestoreResponse:
+        """
+        Make an archived index available for queries and updates again without retraining. The index keeps its original ID, name, data, and permissions. Restore follows your organization's index capacity rules. Requires manage permission.
+        
+        Route: POST /indices/{index_id}/restore
+        
+        Returns:
+            IndexRestoreResponse, a dict with:
+                id (str): Index identifier (ix-<uuid>).
+                name (str): Human-readable name.
+                dataset (str): ID of the dataset this index was built from.
+                status (str): An index is initializing while training, ready when available, failed after unsuccessful training, or archived until restored.
+                created-at (Optional[str]): When training was requested.
+                ready-at (Optional[str]): When the index became ready. Null if not yet complete.
+                archived-at (str): When the current archive began. Present while archived.
+                details (Optional[dict]): Live job diagnostics and Numix progress. The index status indicates when serving is available. Present on get.
+        """
+        _path = f"indices/{self.id}/restore"
+        _body = {}
+        return self._post(_path, _body)
+
     def delete(self) -> IndexDeleteResponse:
         """
         Permanently delete an index and its data. Requires manage permission. This cannot be undone.
@@ -784,7 +851,7 @@ Example — find relevant LG reviews and, for each document, extract every sente
         return self._delete(_path)
 
     def wait(self, poll_interval_start: float = 2.0, poll_interval_max: float = 60.0):
-        """Block until entity reaches ready or failed state. Returns self.
+        """Wait for readiness and return self. Raise on these statuses: failed, archived.
         → GET indices/{self.id}
         """
         import time
@@ -795,6 +862,8 @@ Example — find relevant LG reviews and, for each document, extract every sente
             _s = _resp.get('status')
             if _s == 'ready':
                 return self
+            if _s == 'archived':
+                raise SturdyStatsSdkError(0, f"{self} " + 'is archived. Restore it before waiting for readiness.')
             if _s in {'failed'}:
                 raise SturdyStatsSdkError(0, f"{self} failed with status '{_s}'")
             time.sleep(interval)

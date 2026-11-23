@@ -114,7 +114,7 @@ class Dataset(SturdyStatsBase):
 
     def append(self, filepath: str) -> list[dict]:
         """
-        Append a parquet file chunk to an open dataset. Can be called concurrently. The dataset must not yet be committed. Each file must contain `doc_id` and `doc` columns; additional columns become queryable metadata on the index.
+        Append a parquet file chunk to an open dataset. Can be called concurrently. The dataset must not yet be committed. Each file must contain `doc_id` and `doc` columns, and `doc_id` values must not be null. Additional columns become queryable metadata on the index.
         
         Route: POST /datasets/{dataset_id}/append
         

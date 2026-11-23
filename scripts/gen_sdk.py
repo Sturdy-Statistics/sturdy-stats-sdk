@@ -104,6 +104,17 @@ def get_body_params(op: dict) -> list[dict]:
     return params
 
 
+def get_query_params(op: dict) -> list[dict]:
+    return [{
+        "name": param["name"],
+        "py_name": param["name"].replace("-", "_"),
+        "required": param.get("required", False),
+        "description": param.get("description", ""),
+        "default": param["schema"].get("default"),
+        "py_type": py_type(param["schema"]),
+    } for param in op.get("parameters", []) if param["in"] == "query"]
+
+
 def get_response_props(op: dict) -> list[dict]:
     """Return the property list of the lowest 2xx JSON success response, if any."""
     responses = op.get("responses", {})
@@ -208,6 +219,7 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
     op = get_operation(spec, route)
     description = get_description(op)
     body_params = get_body_params(op) if http_method == "POST" else []
+    query_params = get_query_params(op) if http_method == "GET" else []
     if param_order := method_cfg.get("param_order"):
         by_name = {param["name"]: param for param in body_params}
         unknown = set(param_order) - set(by_name)
@@ -252,6 +264,19 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
 
     if response_key or mtype == "parquet_response":
         sig_parts.append("transform = None")
+
+    if query_params:
+        sig_parts.append("*")
+        for qp in query_params:
+            annotation = qp["py_type"]
+            if qp["required"]:
+                sig_parts.append(f"{qp['py_name']}: {annotation}")
+            elif qp["default"] is not None:
+                sig_parts.append(f"{qp['py_name']}: {annotation} = {qp['default']!r}")
+            elif annotation.startswith("Optional[") or annotation == "Any":
+                sig_parts.append(f"{qp['py_name']}: {annotation} = None")
+            else:
+                sig_parts.append(f"{qp['py_name']}: Optional[{annotation}] = None")
 
     # --- return type + optional TypedDict ---
     class_name = entity_cfg["class"]
@@ -307,7 +332,7 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
     if mtype == "upload_parquet":
         arg_lines.append("            filepath: path to a .parquet file or directory of .parquet files")
     else:
-        for bp in body_params:
+        for bp in body_params + query_params:
             req_note = "" if bp["required"] else f" (default: {bp['default']!r})"
             head = f"            {bp['py_name']}{req_note}"
             if bp["description"]:
@@ -367,8 +392,15 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
         lines.append("        return _inst")
 
     elif http_method == "GET":
+        get_call = "self._get(_path)"
+        if query_params:
+            lines.append("        _params = {k: v for k, v in {")
+            for qp in query_params:
+                lines.append(f"            {qp['name']!r}: {qp['py_name']},")
+            lines.append("        }.items() if v is not None}")
+            get_call = "self._get(_path, params=_params or None)"
         if response_key:
-            lines.append("        _resp = self._get(_path)")
+            lines.append(f"        _resp = {get_call}")
             nav = "_resp"
             for k in response_key:
                 nav = f"{nav}[{k!r}]"
@@ -376,7 +408,7 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
             lines.append(f"        _df = pd.DataFrame({nav})")
             lines.append("        return transform(_df) if transform else _df")
         else:
-            lines.append("        return self._get(_path)")
+            lines.append(f"        return {get_call}")
 
     elif http_method == "POST":
         if mtype == "job_response":
@@ -402,11 +434,12 @@ def render_method(method_cfg: dict, spec: dict, entity_cfg: dict, typedefs: list
 
 
 def render_wait(entity_cfg: dict) -> str:
-    """Emit a wait() method that polls the entity status until ready or failed."""
+    """Emit a wait() method that polls until an entity reaches a terminal state."""
     wait_poll = entity_cfg.get("wait_poll")
     status_field = entity_cfg.get("wait_status_field", "status")
     ready = entity_cfg.get("wait_ready", "ready")
     failed = entity_cfg.get("wait_failed", ["failed"])
+    error_messages = entity_cfg.get("wait_state_errors", {})
     id_param = entity_cfg.get("id_param", "")
 
     if not wait_poll:
@@ -418,10 +451,14 @@ def render_wait(entity_cfg: dict) -> str:
         poll_path = poll_path.replace("{" + id_param + "}", "{self.id}")
 
     failed_set = repr(set(failed))
+    wait_doc = "Block until entity reaches ready or failed state. Returns self."
+    if error_messages:
+        errors = ", ".join([*failed, *error_messages])
+        wait_doc = f"Wait for readiness and return self. Raise on these statuses: {errors}."
 
     lines = [
         "    def wait(self, poll_interval_start: float = 2.0, poll_interval_max: float = 60.0):",
-        '        """Block until entity reaches ready or failed state. Returns self.',
+        f'        """{wait_doc}',
         f"        → GET {poll_path}",
         '        """',
         "        import time",
@@ -432,12 +469,19 @@ def render_wait(entity_cfg: dict) -> str:
         f"            _s = _resp.get({status_field!r})",
         f"            if _s == {ready!r}:",
         "                return self",
+    ]
+    for state, message in error_messages.items():
+        lines.extend([
+            f"            if _s == {state!r}:",
+            f"                raise SturdyStatsSdkError(0, f\"{{self}} \" + {message!r})",
+        ])
+    lines.extend([
         f"            if _s in {failed_set}:",
         f"                raise SturdyStatsSdkError(0, f\"{{self}} failed with status '{{_s}}'\")",
         "            time.sleep(interval)",
         "            interval = min(interval * 1.5, poll_interval_max)",
         "",
-    ]
+    ])
     return "\n".join(lines)
 
 

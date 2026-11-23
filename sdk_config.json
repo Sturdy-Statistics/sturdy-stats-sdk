@@ -69,6 +69,9 @@
       "wait_status_field": "status",
       "wait_ready": "ready",
       "wait_failed": ["failed"],
+      "wait_state_errors": {
+        "archived": "is archived. Restore it before waiting for readiness."
+      },
       "methods": [
         {
           "name": "list",
@@ -151,6 +154,14 @@
           "name": "edit_topic_groups",
           "route": "POST /indices/{index_id}/topic-groups/edits",
           "type": "job_response"
+        },
+        {
+          "name": "archive",
+          "route": "POST /indices/{index_id}/archive"
+        },
+        {
+          "name": "restore",
+          "route": "POST /indices/{index_id}/restore"
         },
         {
           "name": "delete",

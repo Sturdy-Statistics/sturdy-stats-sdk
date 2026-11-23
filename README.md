@@ -6,6 +6,21 @@ This is the sdk for the [Sturdy Statistics API](https://sturdystatistics.com/). 
 
 Core API: `pip install sturdy-stats-sdk`
 
+## Archive and restore an index
+
+Archive a ready index to take it out of service while keeping its name, ID, and
+data. Restore the same index to make it queryable again. Both actions require
+manage permission.
+
+```python
+from sturdystats import Index
+
+index = Index(id="ix-your-index-id")
+index.archive()
+archived_indices = index.list(status="archived")
+index.restore()
+```
+
 ## Resources
 
 Explore our [gallery](https://sturdystatistics.com/gallery/) to browse visualization created by the sturdy-stats-sdk. Follow along with our [quickstart](https://sturdystatistics.com/docs) to hit the ground running or browse our [advanced examples](https://sturdystatistics.com/docs/examples/) to perform rigorous analyses.
